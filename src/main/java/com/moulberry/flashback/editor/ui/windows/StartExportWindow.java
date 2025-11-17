@@ -168,7 +168,7 @@ public class StartExportWindow {
                 config.cjson = !config.cjson;
             }
 
-            if(ImGui.checkbox("Export Entity Tracking Json File",config.cjson)){
+            if(ImGui.checkbox("Export Entity Tracking Json File",config.etjson)){
                 config.etjson = !config.etjson;
             }
 
