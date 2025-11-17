@@ -1,5 +1,6 @@
 package com.moulberry.flashback.keyframe.change;
 
+import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.Interpolation;
 import com.moulberry.flashback.Utils;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;

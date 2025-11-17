@@ -2,6 +2,7 @@ package com.moulberry.flashback.keyframe.impl;
 
 import com.google.common.collect.Maps;
 import com.google.gson.*;
+import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.Interpolation;
 import com.moulberry.flashback.Utils;
 import com.moulberry.flashback.keyframe.Keyframe;
@@ -55,6 +56,7 @@ public class FOVKeyframe extends Keyframe {
 
     @Override
     public KeyframeChange createChange() {
+        Flashback.getReplayServer().savefov = this.fov;
         return new KeyframeChangeFov(this.fov);
     }
 
@@ -70,13 +72,14 @@ public class FOVKeyframe extends Keyframe {
         float f3 = Utils.fovToFocalLength(((FOVKeyframe)p3).fov);
 
         float focalLength = CatmullRom.value(f0, f1, f2, f3, time1, time2, time3, amount);
-
+        Flashback.getReplayServer().savefov = Utils.focalLengthToFov(focalLength);
         return new KeyframeChangeFov(Utils.focalLengthToFov(focalLength));
     }
 
     @Override
     public KeyframeChange createHermiteInterpolatedChange(Map<Float, Keyframe> keyframes, float amount) {
         float focalLength = (float) Hermite.value(Maps.transformValues(keyframes, k -> (double) Utils.fovToFocalLength(((FOVKeyframe)k).fov)), amount);
+        Flashback.getReplayServer().savefov = Utils.focalLengthToFov(focalLength);
         return new KeyframeChangeFov(Utils.focalLengthToFov(focalLength));
     }
 

@@ -23,6 +23,7 @@ import com.moulberry.flashback.keyframe.handler.TickrateKeyframeCapture;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.visuals.AccurateEntityPositionHandler;
+import com.moulberry.flashback.visuals.ReplayVisuals;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.Camera;
@@ -44,9 +45,9 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.openal.SOFTLoopback;
-
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -239,6 +240,25 @@ public class ExportJob {
         return null;
     }
 
+    public float getRollFromQuaternion(Quaternionf q) {
+        // We use double for the intermediate math for better precision
+        // Formula for roll (Z-axis rotation)
+        double sinr_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+        double cosr_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+
+        // Calculate the angle in radians using atan2
+        // Math.atan2 handles all quadrants and edge cases
+        double rollRad = Math.atan2(sinr_cosp, cosr_cosp);
+
+        // Convert radians to degrees
+        // Math.toDegrees(rad) is equivalent to (rad * 180.0 / Math.PI)
+        // The result is already in the -180 to 180 range.
+        double rollDeg = Math.toDegrees(rollRad);
+
+        // Cast to float as requested
+        return (float) rollDeg;
+    }
+
     private void doExport(VideoWriter videoWriter, SaveableFramebufferQueue downloader, TextureTarget infoRenderTarget, Path folder, String fn) {
         ReplayServer replayServer = Flashback.getReplayServer();
         if (replayServer == null) {
@@ -271,6 +291,8 @@ public class ExportJob {
 
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
+
+        float oldfov = replayServer.savefov;
         for (int tickIndex = 0; tickIndex < ticks.size(); tickIndex++) {
             TickInfo tickInfo = ticks.get(tickIndex);
             boolean frozen = tickInfo.frozen;
@@ -306,26 +328,107 @@ public class ExportJob {
             timer.deltaTickResidual = (float) partialClientTick;
             timer.pausedDeltaTickResidual = (float) partialClientTick;
 
+
+
+            AccurateEntityPositionHandler.apply(Minecraft.getInstance().level, timer);
+            oldfov = replayServer.savefov;
+            KeyframeHandler keyframeHandler = new MinecraftKeyframeHandler(Minecraft.getInstance());
+            this.settings.editorState().applyKeyframes(keyframeHandler, (float)(this.settings.startTick() + currentTickDouble));
+
+            long pauseScreenStart = System.currentTimeMillis();
+            int additionalDummyFrames = this.extraDummyFrames;
+            while (Minecraft.getInstance().getOverlay() != null || Minecraft.getInstance().screen != null || additionalDummyFrames > 0) {
+                if (Minecraft.getInstance().getOverlay() != null || Minecraft.getInstance().screen != null) {
+                    this.runClientTick(frozen);
+                }
+                if (additionalDummyFrames > 0) {
+                    additionalDummyFrames -= 1;
+                }
+
+                Window window = Minecraft.getInstance().getWindow();
+                RenderTarget renderTarget = Minecraft.getInstance().mainRenderTarget;
+                renderTarget.bindWrite(true);
+                RenderSystem.clear(16640, Minecraft.ON_OSX);
+                Minecraft.getInstance().gameRenderer.render(Minecraft.getInstance().timer, true);
+                renderTarget.unbindWrite();
+
+                this.shouldChangeFramebufferSize = false;
+                renderTarget.blitToScreen(window.getWidth(), window.getHeight());
+                window.updateDisplay();
+                this.shouldChangeFramebufferSize = true;
+
+                if (Minecraft.getInstance().getOverlay() != null || Minecraft.getInstance().screen != null) {
+                    LockSupport.parkNanos("waiting for pause overlay to disappear", 50_000_000L);
+
+                    // Force remove screens/overlays after 5s/15s respectively
+                    long currentTime = System.currentTimeMillis();
+                    if (pauseScreenStart > currentTime) {
+                        pauseScreenStart = currentTime;
+                    }
+                    if (currentTime - pauseScreenStart > 5000) {
+                        Minecraft.getInstance().setScreen(null);
+                    }
+                    if (currentTime - pauseScreenStart > 15000) {
+                        Minecraft.getInstance().setOverlay(null);
+                    }
+                }
+
+                this.updateClientFreeze(frozen);
+
+                timer.updateFrozenState(frozen);
+                timer.updatePauseState(false);
+                timer.deltaTicks = deltaTicksFloat;
+                timer.realtimeDeltaTicks = deltaTicksFloat;
+                timer.deltaTickResidual = (float) partialClientTick;
+                timer.pausedDeltaTickResidual = (float) partialClientTick;
+            }
+
+
             if (Flashback.getConfig().cjson) {
                 Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
                 if (camera != null) {
+
                     Map<String, Object> keyframeData = new HashMap<>();
                     keyframeData.put("tick", tickIndex);
 
                     Vec3 positionVec3 = camera.getPosition();
-                    keyframeData.put("position", new double[]{positionVec3.x, positionVec3.y, positionVec3.z});
+                    keyframeData.put("position", new double[]{replayServer.campos.x, replayServer.campos.y, replayServer.campos.z});
 
                     // Get rotation (yaw and pitch)
-                    keyframeData.put("yaw", camera.getYRot());
-                    keyframeData.put("pitch", camera.getXRot());
-                    keyframeData.put("roll", 0.0); // Assuming no roll for simplicity, might need adjustment
+                    keyframeData.put("yaw", camera.getYRot() - replayServer.ShakeY);
+                    keyframeData.put("pitch", camera.getXRot() - replayServer.ShakeX);
+                    keyframeData.put("roll", replayServer.saveroll);
 
                     // Get FOV (might need to get it from options or game settings)
+                    float currentOverrideFov = Flashback.getReplayServer().getEditorState().replayVisuals.overrideFovAmount;
+                    float keyframeStartFov = oldfov;
+                    float keyframeEndFov = replayServer.savefov; // This is the one that might be stale
 
-                    keyframeData.put("fov", Minecraft.getInstance().options.fov().get().doubleValue());
+
+                    // We need a small tolerance (epsilon) for float comparison
+                    final float EPSILON = 0.001f;
+                    boolean isOverrideDifferent = Math.abs(currentOverrideFov - keyframeEndFov) > EPSILON;
+
+                    // --- This is how you should use the check ---
+
+                    // By default, assume the keyframe "end" value is our target
+                    float targetFov = keyframeEndFov;
+
+                    // BUT, if the override is different, it's the "newest" value and should win.
+                    // This makes the interpolation target the live editor value.
+                    if (isOverrideDifferent) {
+                        targetFov = currentOverrideFov;
+                    }
+
+                    // Now, perform your interpolation using the correct target
+                    float interpolatedFov = (float) (keyframeStartFov + (targetFov - keyframeStartFov) * partialClientTick);
+
+                    keyframeData.put("fov", interpolatedFov);
 
                     allCameraKeyframes.add(keyframeData);
                 }
+            }
+            if(Flashback.getConfig().etjson){
                 if (!Flashback.trackedmodels.isEmpty()) {
 
                     Map<String, Object> keyframeData = new HashMap<>();
@@ -393,62 +496,6 @@ public class ExportJob {
                     trackedData.add(keyframeData);
                 }
             }
-
-            AccurateEntityPositionHandler.apply(Minecraft.getInstance().level, timer);
-
-            KeyframeHandler keyframeHandler = new MinecraftKeyframeHandler(Minecraft.getInstance());
-            this.settings.editorState().applyKeyframes(keyframeHandler, (float)(this.settings.startTick() + currentTickDouble));
-
-            long pauseScreenStart = System.currentTimeMillis();
-            int additionalDummyFrames = this.extraDummyFrames;
-            while (Minecraft.getInstance().getOverlay() != null || Minecraft.getInstance().screen != null || additionalDummyFrames > 0) {
-                if (Minecraft.getInstance().getOverlay() != null || Minecraft.getInstance().screen != null) {
-                    this.runClientTick(frozen);
-                }
-                if (additionalDummyFrames > 0) {
-                    additionalDummyFrames -= 1;
-                }
-
-                Window window = Minecraft.getInstance().getWindow();
-                RenderTarget renderTarget = Minecraft.getInstance().mainRenderTarget;
-                renderTarget.bindWrite(true);
-                RenderSystem.clear(16640, Minecraft.ON_OSX);
-                Minecraft.getInstance().gameRenderer.render(Minecraft.getInstance().timer, true);
-                renderTarget.unbindWrite();
-
-                this.shouldChangeFramebufferSize = false;
-                renderTarget.blitToScreen(window.getWidth(), window.getHeight());
-                window.updateDisplay();
-                this.shouldChangeFramebufferSize = true;
-
-                if (Minecraft.getInstance().getOverlay() != null || Minecraft.getInstance().screen != null) {
-                    LockSupport.parkNanos("waiting for pause overlay to disappear", 50_000_000L);
-
-                    // Force remove screens/overlays after 5s/15s respectively
-                    long currentTime = System.currentTimeMillis();
-                    if (pauseScreenStart > currentTime) {
-                        pauseScreenStart = currentTime;
-                    }
-                    if (currentTime - pauseScreenStart > 5000) {
-                        Minecraft.getInstance().setScreen(null);
-                    }
-                    if (currentTime - pauseScreenStart > 15000) {
-                        Minecraft.getInstance().setOverlay(null);
-                    }
-                }
-
-                this.updateClientFreeze(frozen);
-
-                timer.updateFrozenState(frozen);
-                timer.updatePauseState(false);
-                timer.deltaTicks = deltaTicksFloat;
-                timer.realtimeDeltaTicks = deltaTicksFloat;
-                timer.deltaTickResidual = (float) partialClientTick;
-                timer.pausedDeltaTickResidual = (float) partialClientTick;
-            }
-
-
-
             SaveableFramebuffer saveable = downloader.take();
             RenderTarget renderTarget = Minecraft.getInstance().mainRenderTarget;
 
@@ -498,6 +545,63 @@ public class ExportJob {
             }
         }
 
+
+        if (allCameraKeyframes == null || allCameraKeyframes.size() < 7) {
+            // Need enough frames to fit the kernel (Radius 3 + center = 7 frames)
+            // If not enough frames, skip the smoothing.
+            // Continue with the JSON export at the end of the method.
+        } else {
+
+            // --- GAUSSIAN KERNEL CONFIGURATION ---
+            final int KERNEL_RADIUS = 3; // Looks 3 frames before and 3 frames after
+            // Pre-calculated weights for a radius of 3 (7 points), summing to ~1.0.
+            // These weights determine the shape and strength of the smoothing curve.
+            final float[] GAUSSIAN_KERNEL = {0.006f, 0.061f, 0.242f, 0.383f, 0.242f, 0.061f, 0.006f};
+
+            // 1. Extract original FOV values into a temporary list
+            // This prevents using already-smoothed values (data contamination).
+            List<Float> originalFovs = new ArrayList<>();
+            for (Map<String, Object> keyframe : allCameraKeyframes) {
+                Object fovObj = keyframe.get("fov");
+                if (fovObj instanceof Number) {
+                    originalFovs.add(((Number) fovObj).floatValue());
+                } else {
+                    originalFovs.add(0.0f); // Default for invalid data
+                }
+            }
+
+            int listSize = originalFovs.size();
+
+            // 2. Apply Gaussian Smoothing (Convolution)
+            for (int i = 0; i < listSize; i++) {
+
+                // Boundary Condition: Skip frames at the edge where the kernel wouldn't fully fit.
+                // The first 3 and last 3 frames will remain fixed.
+                if (i < KERNEL_RADIUS || i >= listSize - KERNEL_RADIUS) {
+                    continue;
+                }
+
+                float newFov = 0.0f;
+
+                // Apply Convolution: Weighted sum of neighbors
+                for (int j = -KERNEL_RADIUS; j <= KERNEL_RADIUS; j++) {
+
+                    // keyframeIndex is the position in the original list
+                    int keyframeIndex = i + j;
+                    // kernelIndex maps j (-3 to 3) to the kernel array index (0 to 6)
+                    int kernelIndex = j + KERNEL_RADIUS;
+
+                    float fovAtNeighbor = originalFovs.get(keyframeIndex);
+                    float weight = GAUSSIAN_KERNEL[kernelIndex];
+
+                    newFov += fovAtNeighbor * weight;
+                }
+
+                // 3. Update the keyframe data with the new smoothed value
+                allCameraKeyframes.get(i).put("fov", newFov);
+            }
+        }
+
         if (Flashback.getConfig().cjson) {
             // Write camera keyframes to JSON file
             try (FileWriter writer = new FileWriter(folder + fn)) {
@@ -506,6 +610,7 @@ public class ExportJob {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }if(Flashback.getConfig().etjson) {
             if (!Flashback.trackedmodels.isEmpty()) {
 
                 try (FileWriter writera = new FileWriter(folder + "ET.json")) {
@@ -797,6 +902,28 @@ public class ExportJob {
 
             y += font.lineHeight / 2 + 1;
 
+            String iammaddiefilms = "https://www.iammaddiefilms.com/";
+            int iammaddieWidth = font.width(iammaddiefilms);
+            if (mouseX > x - iammaddieWidth/2f && mouseX < x + iammaddieWidth/2f && mouseY > y && mouseY < y + font.lineHeight) {
+                font.drawInBatch(Component.literal(iammaddiefilms).withStyle(ChatFormatting.UNDERLINE), x - iammaddieWidth/2f, y,
+                        -1, true, matrix, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+
+                if (GLFW.glfwGetMouseButton(window.getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) != 0) {
+                    if (!this.patreonLinkClicked) {
+                        this.patreonLinkClicked = true;
+                        Util.getPlatform().openUri(iammaddiefilms);
+                    }
+                } else {
+                    this.patreonLinkClicked = false;
+                }
+            } else {
+                font.drawInBatch(iammaddiefilms, x - iammaddieWidth/2f, y,
+                        -1, true, matrix, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+                this.patreonLinkClicked = false;
+            }
+
+            y += (font.lineHeight + 6) / 2 + 1;
+
             String patreon = "https://www.patreon.com/flashbackmod";
             int patreonWidth = font.width(patreon);
             if (mouseX > x - patreonWidth/2f && mouseX < x + patreonWidth/2f && mouseY > y && mouseY < y + font.lineHeight) {
@@ -816,6 +943,8 @@ public class ExportJob {
                     -1, true, matrix, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
                 this.patreonLinkClicked = false;
             }
+
+
 
             bufferSource.endBatch();
             RenderSystem.enableDepthTest();

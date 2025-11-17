@@ -124,6 +124,10 @@ public class StartExportWindow {
                             config.resolution[0] = 2160;
                             config.resolution[1] = 1440;
                         }
+                        case ASPECT_2_40_1 -> {
+                            config.resolution[0] = 3840;
+                            config.resolution[1] = 1600;
+                        }
                     }
                 }
                 lastCustomAspectRatio = aspectRatio;
@@ -162,6 +166,10 @@ public class StartExportWindow {
 
             if(ImGui.checkbox("Export Camera Json File",config.cjson)){
                 config.cjson = !config.cjson;
+            }
+
+            if(ImGui.checkbox("Export Entity Tracking Json File",config.cjson)){
+                config.etjson = !config.etjson;
             }
 
             ImGuiHelper.tooltip("Creates a Simple Json File with all the camera information for each frame of the exported video.");

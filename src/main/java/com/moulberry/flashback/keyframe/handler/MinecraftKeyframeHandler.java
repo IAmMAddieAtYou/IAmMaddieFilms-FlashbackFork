@@ -1,6 +1,7 @@
 package com.moulberry.flashback.keyframe.handler;
 
 import com.moulberry.flashback.FilePlayerSkin;
+import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.keyframe.change.*;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
@@ -9,6 +10,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -75,15 +77,17 @@ public record MinecraftKeyframeHandler(Minecraft minecraft) implements KeyframeH
             }
 
             player.moveTo(position.x, position.y, position.z, (float) yaw, (float) pitch);
-
+            Flashback.getReplayServer().campos = new Vec3(position.x, position.y,position.z);
             EditorState editorState = EditorStateManager.getCurrent();
             if (editorState != null) {
                 if (roll > -0.01 && roll < 0.01) {
                     editorState.replayVisuals.overrideRoll = false;
                     editorState.replayVisuals.overrideRollAmount = 0.0f;
+                    Flashback.getReplayServer().saveroll = 0;
                 } else {
                     editorState.replayVisuals.overrideRoll = true;
                     editorState.replayVisuals.overrideRollAmount = (float) roll;
+                    Flashback.getReplayServer().saveroll = roll;
                 }
             }
 
@@ -96,6 +100,8 @@ public record MinecraftKeyframeHandler(Minecraft minecraft) implements KeyframeH
         EditorState editorState = EditorStateManager.getCurrent();
         if (editorState != null) {
             editorState.replayVisuals.setFov(fov);
+
+            Flashback.getReplayServer().fov = fov;
         }
     }
 

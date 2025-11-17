@@ -7,7 +7,8 @@ public enum AspectRatio implements ComboOption {
     ASPECT_240_1("2.40:1 (Widescreen)", 2.4f),
     ASPECT_1_1("1:1 (Square)", 1f),
     ASPECT_4_3("4:3 (Fullscreen)", 4/3f),
-    ASPECT_3_2("3:2 (Photo)", 3/2f);
+    ASPECT_3_2("3:2 (Photo)", 3/2f),
+    ASPECT_2_40_1("2.40:1 (Svefnthorn)", 2.40f/1f);
 
     private final String text;
     private final float aspectRatio;

@@ -50,6 +50,8 @@ public class FlashbackConfig {
 
     public boolean cjson = false;
 
+    public boolean etjson = false;
+
     @OptionCaption("flashback.option.hide_pause_menu_controls")
     @OptionDescription("flashback.option.hide_pause_menu_controls.description")
     public boolean hidePauseMenuControls = false;

@@ -53,9 +53,25 @@ public class CameraRotation {
             float yAmplitude = visuals.cameraShakeYAmplitude;
             float xAmplitude = visuals.cameraShakeXAmplitude;
 
-            float yRot = fastNoiseLite.GetNoise(shakeTimeX, -10000) * 2*(float)Math.PI;
-            float xRot = fastNoiseLite.GetNoise(-10000, shakeTimeY) * 2*(float)Math.PI;
+
+
+            float noiseForYaw = fastNoiseLite.GetNoise(shakeTimeX, -10000);
+            float noiseForPitch = fastNoiseLite.GetNoise(-10000, shakeTimeY);
+
+            // Yaw rotation (Y-axis) uses xAmplitude:
+            Flashback.getReplayServer().ShakeY = noiseForYaw * xAmplitude;
+            // Pitch rotation (X-axis) uses yAmplitude:
+            Flashback.getReplayServer().ShakeX = noiseForPitch * yAmplitude;
+
+            float yRot = noiseForYaw * 2*(float)Math.PI;
+            float xRot = noiseForPitch * 2*(float)Math.PI;
+
+
             quaternionf = quaternionf.rotateYXZ(yRot * xAmplitude/360, xRot * yAmplitude/360, 0);
+        }else {
+            // Reset shake if not active
+            Flashback.getReplayServer().ShakeX = 0.0f;
+            Flashback.getReplayServer().ShakeY = 0.0f;
         }
         return quaternionf;
     }

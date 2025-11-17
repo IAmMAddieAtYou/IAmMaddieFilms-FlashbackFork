@@ -1,5 +1,6 @@
 package com.moulberry.flashback.visuals;
 
+import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.combo_options.AspectRatio;
 import com.moulberry.flashback.combo_options.Sizing;
 import com.moulberry.flashback.combo_options.WeatherOverride;
@@ -56,6 +57,7 @@ public class ReplayVisuals {
 
     public void setFov(float fov) {
         if (!overrideFov || Math.abs(overrideFovAmount - fov) >= 0.01) {
+            
             Minecraft.getInstance().levelRenderer.needsUpdate();
         }
 

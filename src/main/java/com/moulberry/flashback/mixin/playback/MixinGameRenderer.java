@@ -124,9 +124,11 @@ public abstract class MixinGameRenderer {
             }
             EditorState editorState = EditorStateManager.getCurrent();
             if (editorState != null && editorState.replayVisuals.overrideFov) {
+                ;
                 cir.setReturnValue((double) editorState.replayVisuals.overrideFovAmount);
             } else {
                 int fov = this.minecraft.options.fov().get().intValue();
+
                 cir.setReturnValue((double) fov);
             }
         }

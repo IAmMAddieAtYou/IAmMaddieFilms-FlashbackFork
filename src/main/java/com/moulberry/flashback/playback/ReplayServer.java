@@ -129,7 +129,9 @@ public class ReplayServer extends IntegratedServer {
     public static int REPLAY_VIEWER_IDS_START = -981723987;
     public static String REPLAY_VIEWER_NAME = "Replay Viewer";
     public static final int CHUNK_CACHE_SIZE = 10000;
-
+    public float fov = 70;
+    public float savefov;
+    public double saveroll = 0;
     public volatile int jumpToTick = -1;
     public volatile boolean replayPaused = true;
     public AtomicBoolean forceApplyKeyframes = new AtomicBoolean(false);
@@ -140,7 +142,9 @@ public class ReplayServer extends IntegratedServer {
     private int desiredFrozenDelay = -1;
     private boolean isFrozen = false;
     private int frozenDelay = -1;
-
+    public double ShakeX;
+    public double ShakeY;
+    public Vec3 campos;
     private boolean hasNonSpectatorReplayViewer = false;
 
     private int currentTick = 0;
