@@ -4,6 +4,9 @@ Copyright 2024 Moulberry. Do not reupload or redistribute.
 
 Flashback is a Minecraft mod which allows you to record your Minecraft gameplay, play it back and create stunning cinematic shots
 
+## Check out our studio IAmMaddieFilms:
+https://www.iammaddiefilms.com/
+
 ## How to install
 1. Install Fabric (https://fabricmc.net/wiki/install)
 2. Download Flashback from https://modrinth.com/mod/flashback/
