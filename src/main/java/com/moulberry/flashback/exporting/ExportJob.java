@@ -392,7 +392,7 @@ public class ExportJob {
                     keyframeData.put("tick", tickIndex);
 
                     Vec3 positionVec3 = camera.getPosition();
-                    keyframeData.put("position", new double[]{replayServer.campos.x, replayServer.campos.y, replayServer.campos.z});
+                    keyframeData.put("position", new double[]{positionVec3.x, positionVec3.y, positionVec3.z});
 
                     // Get rotation (yaw and pitch)
                     keyframeData.put("yaw", camera.getYRot() - replayServer.ShakeY);
