@@ -87,31 +87,86 @@ public class KeyframeTrack {
         KeyframeChange leftChange = null;
         KeyframeChange rightChange = null;
 
-        if (leftInterpolation == SidedInterpolationType.SMOOTH ||
-                rightInterpolation == SidedInterpolationType.SMOOTH) {
+        // --- 4-POINT INTERPOLATION (Smooth, Circular, Monotone, Nurbs, Quintic) ---
+        // Context: Before(t0) -> Lower(t1) -> Ceil(t2) -> After(t3)
+        boolean leftIs4Point = is4Point(leftInterpolation);
+        boolean rightIs4Point = is4Point(rightInterpolation);
+
+        if (leftIs4Point || rightIs4Point) {
             Map.Entry<Integer, Keyframe> beforeEntry = keyframeTimes.floorEntry(lowerEntry.getKey() - 1);
-            if (beforeEntry == null || beforeEntry.getValue().interpolationType() == InterpolationType.HOLD) { // don't include the right-side of the hold keyframe
+            if (beforeEntry == null || beforeEntry.getValue().interpolationType() == InterpolationType.HOLD) {
                 beforeEntry = lowerEntry;
             }
 
-            Map.Entry<Integer, Keyframe> afterAfterEntry = keyframeTimes.ceilingEntry(ceilEntry.getKey() + 1);
-            if (afterAfterEntry == null || ceilEntry.getValue().interpolationType() == InterpolationType.HOLD) { // ceil is to the left of afterAfter
-                afterAfterEntry = ceilEntry;
+            Map.Entry<Integer, Keyframe> afterEntry = keyframeTimes.ceilingEntry(ceilEntry.getKey() + 1);
+            if (afterEntry == null || ceilEntry.getValue().interpolationType() == InterpolationType.HOLD) {
+                afterEntry = ceilEntry;
             }
 
             float realTimeBeforeTick = realTimeMapping == null ? beforeEntry.getKey() : realTimeMapping.getRealTime(beforeEntry.getKey());
-            float realTimeAfterTick = realTimeMapping == null ? afterAfterEntry.getKey() : realTimeMapping.getRealTime(afterAfterEntry.getKey());
+            float realTimeAfterTick = realTimeMapping == null ? afterEntry.getKey() : realTimeMapping.getRealTime(afterEntry.getKey());
 
-            KeyframeChange smoothChange = beforeEntry.getValue().createSmoothInterpolatedChange(lowerEntry.getValue(), ceilEntry.getValue(), afterAfterEntry.getValue(),
-                realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
-
-            if (leftInterpolation == SidedInterpolationType.SMOOTH) {
-                leftChange = smoothChange;
+            // Generate Change
+            if (leftIs4Point) {
+                leftChange = create4PointChange(leftInterpolation, beforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
+                        realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
             }
-            if (rightInterpolation == SidedInterpolationType.SMOOTH) {
-                rightChange = smoothChange;
+            if (rightIs4Point) {
+                if (leftIs4Point && leftInterpolation == rightInterpolation) {
+                    rightChange = leftChange;
+                } else {
+                    rightChange = create4PointChange(rightInterpolation, beforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
+                            realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+                }
             }
         }
+
+        // --- 5-POINT INTERPOLATION (Akima, Smoothing) ---
+        // Context: BeforeBefore(tBefore) -> Before(t0) -> Lower(t1) -> Ceil(t2) -> After(t3)
+        boolean leftIs5Point = is5Point(leftInterpolation);
+        boolean rightIs5Point = is5Point(rightInterpolation);
+
+        if (leftIs5Point || rightIs5Point) {
+            // Need neighbors: Before, After
+            Map.Entry<Integer, Keyframe> beforeEntry = keyframeTimes.floorEntry(lowerEntry.getKey() - 1);
+            if (beforeEntry == null || beforeEntry.getValue().interpolationType() == InterpolationType.HOLD) {
+                beforeEntry = lowerEntry;
+            }
+            Map.Entry<Integer, Keyframe> afterEntry = keyframeTimes.ceilingEntry(ceilEntry.getKey() + 1);
+            if (afterEntry == null || ceilEntry.getValue().interpolationType() == InterpolationType.HOLD) {
+                afterEntry = ceilEntry;
+            }
+
+            // Need extra neighbor: BeforeBefore
+            Map.Entry<Integer, Keyframe> beforeBeforeEntry = null;
+            // Only look back if beforeEntry is not the same as lowerEntry (meaning we actually found a valid before node)
+            if (beforeEntry != lowerEntry) {
+                beforeBeforeEntry = keyframeTimes.floorEntry(beforeEntry.getKey() - 1);
+            }
+            if (beforeBeforeEntry == null || beforeBeforeEntry.getValue().interpolationType() == InterpolationType.HOLD) {
+                beforeBeforeEntry = beforeEntry;
+            }
+
+            float realTimeBeforeTick = realTimeMapping == null ? beforeEntry.getKey() : realTimeMapping.getRealTime(beforeEntry.getKey());
+            float realTimeAfterTick = realTimeMapping == null ? afterEntry.getKey() : realTimeMapping.getRealTime(afterEntry.getKey());
+            float realTimeBeforeBeforeTick = realTimeMapping == null ? beforeBeforeEntry.getKey() : realTimeMapping.getRealTime(beforeBeforeEntry.getKey());
+
+            // Generate Change
+            if (leftIs5Point) {
+                leftChange = create5PointChange(leftInterpolation, beforeEntry.getValue(), beforeBeforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
+                        realTimeBeforeBeforeTick, realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+            }
+            if (rightIs5Point) {
+                if (leftIs5Point && leftInterpolation == rightInterpolation) {
+                    rightChange = leftChange;
+                } else {
+                    rightChange = create5PointChange(rightInterpolation, beforeEntry.getValue(), beforeBeforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
+                            realTimeBeforeBeforeTick, realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+                }
+            }
+        }
+
+        // --- MAP-BASED INTERPOLATION (Hermite) ---
         if (leftInterpolation == SidedInterpolationType.HERMITE ||
                 rightInterpolation == SidedInterpolationType.HERMITE) {
             Integer minKey = lowerEntry.getKey();
@@ -123,7 +178,6 @@ public class KeyframeTrack {
                     minKey = null;
                     break;
                 } else if (before.getValue().interpolationType() == InterpolationType.HOLD) {
-                    // don't include the right-side of the hold keyframe, or anything before it
                     break;
                 }
 
@@ -139,7 +193,6 @@ public class KeyframeTrack {
                     maxKey = null;
                     break;
                 } else if (after.getValue().interpolationType() == InterpolationType.HOLD) {
-                    // include the hold keyframe, but not anything after it
                     maxKey = after.getKey();
                     break;
                 }
@@ -175,6 +228,7 @@ public class KeyframeTrack {
                 rightChange = hermiteChange;
             }
         }
+
         if (leftChange == null || rightChange == null) {
             double adjustedAmount = SidedInterpolationType.interpolate(leftInterpolation, rightInterpolation, amount);
 
@@ -194,6 +248,40 @@ public class KeyframeTrack {
         }
 
         return KeyframeChange.interpolateSafe(leftChange, rightChange, amount);
+    }
+
+    private boolean is4Point(SidedInterpolationType type) {
+        return type == SidedInterpolationType.SMOOTH ||
+                type == SidedInterpolationType.CIRCULAR ||
+                type == SidedInterpolationType.MONOTONECUBIC ||
+                type == SidedInterpolationType.NURBS ||
+                type == SidedInterpolationType.QUINTIC;
+    }
+
+    private boolean is5Point(SidedInterpolationType type) {
+        return type == SidedInterpolationType.AKIMA ||
+                type == SidedInterpolationType.SMOOTHING;
+    }
+
+    private KeyframeChange create4PointChange(SidedInterpolationType type, Keyframe before, Keyframe lower, Keyframe ceil, Keyframe after,
+                                              float t0, float t1, float t2, float t3, float amount) {
+        switch (type) {
+            case SMOOTH: return before.createSmoothInterpolatedChange(lower, ceil, after, t0, t1, t2, t3, amount);
+            case CIRCULAR: return before.createCircularInterpolatedChange(lower, ceil, after, t0, t1, t2, t3, amount);
+            case MONOTONECUBIC: return before.createMonotoneCubicInterpolatedChange(lower, ceil, after, t0, t1, t2, t3, amount);
+            case NURBS: return before.createNurbsInterpolatedChange(lower, ceil, after, t0, t1, t2, t3, amount);
+            case QUINTIC: return before.createQuinticInterpolatedChange(lower, ceil, after, t0, t1, t2, t3, amount);
+            default: throw new IllegalArgumentException("Unsupported 4-point interpolation: " + type);
+        }
+    }
+
+    private KeyframeChange create5PointChange(SidedInterpolationType type, Keyframe before, Keyframe beforeBefore, Keyframe lower, Keyframe ceil, Keyframe after,
+                                              float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        switch (type) {
+            case AKIMA: return before.createAkimaInterpolatedChange(beforeBefore, lower, ceil, after, tBefore, t0, t1, t2, t3, amount);
+            case SMOOTHING: return before.createSmoothingInterpolatedChange(beforeBefore, lower, ceil, after, tBefore, t0, t1, t2, t3, amount);
+            default: throw new IllegalArgumentException("Unsupported 5-point interpolation: " + type);
+        }
     }
 
     @Nullable

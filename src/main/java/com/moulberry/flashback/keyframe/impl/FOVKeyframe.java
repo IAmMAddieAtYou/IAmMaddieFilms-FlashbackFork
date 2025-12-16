@@ -14,6 +14,12 @@ import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.FOVKeyframeType;
 import com.moulberry.flashback.spline.CatmullRom;
 import com.moulberry.flashback.spline.Hermite;
+import com.moulberry.flashback.spline.Akima;
+import com.moulberry.flashback.spline.Circular;
+import com.moulberry.flashback.spline.Smoothing;
+import com.moulberry.flashback.spline.MonotoneCubic;
+import com.moulberry.flashback.spline.Nurbs;
+import com.moulberry.flashback.spline.Quintic;
 import imgui.ImGui;
 
 import java.lang.reflect.Type;
@@ -58,6 +64,93 @@ public class FOVKeyframe extends Keyframe {
     public KeyframeChange createChange() {
         Flashback.getReplayServer().savefov = this.fov;
         return new KeyframeChangeFov(this.fov);
+    }
+
+
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        float fBefore = Utils.fovToFocalLength(((FOVKeyframe) pBefore).fov);
+        float f0 = Utils.fovToFocalLength(this.fov);
+        float f1 = Utils.fovToFocalLength(((FOVKeyframe) p1).fov);
+        float f2 = Utils.fovToFocalLength(((FOVKeyframe) p2).fov);
+        float f3 = Utils.fovToFocalLength(((FOVKeyframe) p3).fov);
+
+        float focalLength = (float) Akima.value(fBefore, f0, f1, f2, f3, tBefore, t0, t1, t2, t3, amount);
+        float fov = Utils.focalLengthToFov(focalLength);
+
+        Flashback.getReplayServer().savefov = fov;
+        return new KeyframeChangeFov(fov);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        float fBefore = Utils.fovToFocalLength(((FOVKeyframe) pBefore).fov);
+        float f0 = Utils.fovToFocalLength(this.fov);
+        float f1 = Utils.fovToFocalLength(((FOVKeyframe) p1).fov);
+        float f2 = Utils.fovToFocalLength(((FOVKeyframe) p2).fov);
+        float f3 = Utils.fovToFocalLength(((FOVKeyframe) p3).fov);
+
+        float focalLength = (float) Smoothing.value(fBefore, f0, f1, f2, f3, tBefore, t0, t1, t2, t3, amount);
+        float fov = Utils.focalLengthToFov(focalLength);
+
+        Flashback.getReplayServer().savefov = fov;
+        return new KeyframeChangeFov(fov);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        float f1 = Utils.fovToFocalLength(((FOVKeyframe) p1).fov);
+        float f2 = Utils.fovToFocalLength(((FOVKeyframe) p2).fov);
+
+        float focalLength = (float) Circular.value(f1, f2, amount);
+        float fov = Utils.focalLengthToFov(focalLength);
+
+        Flashback.getReplayServer().savefov = fov;
+        return new KeyframeChangeFov(fov);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        float f0 = Utils.fovToFocalLength(this.fov);
+        float f1 = Utils.fovToFocalLength(((FOVKeyframe) p1).fov);
+        float f2 = Utils.fovToFocalLength(((FOVKeyframe) p2).fov);
+        float f3 = Utils.fovToFocalLength(((FOVKeyframe) p3).fov);
+
+        float focalLength = (float) MonotoneCubic.value(f0, f1, f2, f3, t0, t1, t2, t3, amount);
+        float fov = Utils.focalLengthToFov(focalLength);
+
+        Flashback.getReplayServer().savefov = fov;
+        return new KeyframeChangeFov(fov);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        float f0 = Utils.fovToFocalLength(this.fov);
+        float f1 = Utils.fovToFocalLength(((FOVKeyframe) p1).fov);
+        float f2 = Utils.fovToFocalLength(((FOVKeyframe) p2).fov);
+        float f3 = Utils.fovToFocalLength(((FOVKeyframe) p3).fov);
+
+        float focalLength = (float) Nurbs.value(f0, f1, f2, f3, t0, t1, t2, t3, amount);
+        float fov = Utils.focalLengthToFov(focalLength);
+
+        Flashback.getReplayServer().savefov = fov;
+        return new KeyframeChangeFov(fov);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        float f1 = Utils.fovToFocalLength(((FOVKeyframe) p1).fov);
+        float f2 = Utils.fovToFocalLength(((FOVKeyframe) p2).fov);
+
+        float focalLength = (float) Quintic.value(f1, f2, amount);
+        float fov = Utils.focalLengthToFov(focalLength);
+
+        Flashback.getReplayServer().savefov = fov;
+        return new KeyframeChangeFov(fov);
     }
 
     @Override

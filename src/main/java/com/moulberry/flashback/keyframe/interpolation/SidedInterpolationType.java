@@ -6,12 +6,24 @@ public enum SidedInterpolationType {
     LINEAR,
     EASE,
     HOLD,
-    HERMITE;
+    HERMITE,
+    AKIMA,
+    CIRCULAR,
+    MONOTONECUBIC,
+    NURBS,
+    QUINTIC,
+    SMOOTHING;
 
     private boolean isSpecial() {
-        return this == SidedInterpolationType.SMOOTH || this == SidedInterpolationType.HERMITE;
+        return this == SidedInterpolationType.SMOOTH ||
+                this == SidedInterpolationType.HERMITE ||
+                this == SidedInterpolationType.AKIMA ||
+                this == SidedInterpolationType.CIRCULAR ||
+                this == SidedInterpolationType.MONOTONECUBIC ||
+                this == SidedInterpolationType.NURBS ||
+                this == SidedInterpolationType.QUINTIC ||
+                this == SidedInterpolationType.SMOOTHING;
     }
-
     public static float interpolate(SidedInterpolationType left, SidedInterpolationType right, float amount) {
         if (left.isSpecial()) {
             if (right.isSpecial()) {

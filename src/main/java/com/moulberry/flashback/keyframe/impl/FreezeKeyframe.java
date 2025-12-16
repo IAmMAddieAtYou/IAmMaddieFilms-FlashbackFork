@@ -18,6 +18,7 @@ import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.FreezeKeyframeType;
 import com.moulberry.flashback.keyframe.types.SpeedKeyframeType;
 import com.moulberry.flashback.spline.CatmullRom;
+
 import imgui.ImGui;
 
 import java.lang.reflect.Type;
@@ -68,6 +69,39 @@ public class FreezeKeyframe extends Keyframe {
     @Override
     public KeyframeChange createChange() {
         return new KeyframeChangeFreeze(this.frozen, Math.max(0, Math.min(10, this.frozenDelay)));
+    }
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        return this.createChange();
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        return this.createChange();
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return this.createChange();
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return this.createChange();
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return this.createChange();
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return this.createChange();
     }
 
     @Override

@@ -1722,6 +1722,33 @@ public class TimelineWindow {
                 drawList.addTriangleFilled(x, y - keyframeSize, x + keyframeSize, y + keyframeSize,
                         x - keyframeSize, y + keyframeSize, colour);
             }
+            case AKIMA -> {
+                // Pentagon (5-point for 5-point spline)
+                drawList.addNgonFilled(x, y, keyframeSize, colour, 5);
+            }
+            case CIRCULAR -> {
+                // Ring / Donut
+                drawList.addCircle(x, y, keyframeSize, colour, 12, keyframeSize * 0.4f);
+            }
+            case MONOTONECUBIC -> {
+                // Diamond (Rotated Square)
+                drawList.addQuadFilled(x, y - keyframeSize, x + keyframeSize, y, x, y + keyframeSize, x - keyframeSize, y, colour);
+            }
+            case NURBS -> {
+                // Hexagon
+                drawList.addNgonFilled(x, y, keyframeSize, colour, 6);
+            }
+            case QUINTIC -> {
+                // Inverted Triangle (Pointing Down)
+                drawList.addTriangleFilled(x - keyframeSize, y - keyframeSize, x + keyframeSize, y - keyframeSize, x, y + keyframeSize, colour);
+            }
+            case SMOOTHING -> {
+                // Plus Sign / Cross
+                float s = keyframeSize;
+                float thickness = s * 0.4f;
+                drawList.addRectFilled(x - s, y - thickness, x + s, y + thickness, colour); // Horizontal
+                drawList.addRectFilled(x - thickness, y - s, x + thickness, y + s, colour); // Vertical
+            }
         }
     }
 

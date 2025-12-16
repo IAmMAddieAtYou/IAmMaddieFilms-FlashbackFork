@@ -12,6 +12,12 @@ import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.CameraKeyframeType;
 import com.moulberry.flashback.spline.CatmullRom;
+import com.moulberry.flashback.spline.Akima;
+import com.moulberry.flashback.spline.Circular;
+import com.moulberry.flashback.spline.Smoothing;
+import com.moulberry.flashback.spline.MonotoneCubic;
+import com.moulberry.flashback.spline.Nurbs;
+import com.moulberry.flashback.spline.Quintic;
 import com.moulberry.flashback.spline.Hermite;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
@@ -21,6 +27,7 @@ import org.apache.commons.math3.analysis.interpolation.HermiteInterpolator;
 import org.joml.Vector3d;
 
 import java.lang.reflect.Type;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -115,6 +122,96 @@ public class CameraKeyframe extends Keyframe {
     @Override
     public KeyframeChange createChange() {
         return new KeyframeChangeCameraPosition(this.position, this.yaw, this.pitch, this.roll);
+    }
+
+    // --- 5-POINT INTERPOLATION (Akima, Smoothing) ---
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        CameraKeyframe kBefore = (CameraKeyframe) pBefore;
+        CameraKeyframe k1 = (CameraKeyframe) p1;
+        CameraKeyframe k2 = (CameraKeyframe) p2;
+        CameraKeyframe k3 = (CameraKeyframe) p3;
+
+        Vector3d pos = Akima.position(kBefore.position, this.position, k1.position, k2.position, k3.position, tBefore, t0, t1, t2, t3, amount);
+        float yaw = (float) Akima.degrees(kBefore.yaw, this.yaw, k1.yaw, k2.yaw, k3.yaw, tBefore, t0, t1, t2, t3, amount);
+        float pitch = (float) Akima.degrees(kBefore.pitch, this.pitch, k1.pitch, k2.pitch, k3.pitch, tBefore, t0, t1, t2, t3, amount);
+        float roll = (float) Akima.degrees(kBefore.roll, this.roll, k1.roll, k2.roll, k3.roll, tBefore, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraPosition(pos, yaw, pitch, roll);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        CameraKeyframe kBefore = (CameraKeyframe) pBefore;
+        CameraKeyframe k1 = (CameraKeyframe) p1;
+        CameraKeyframe k2 = (CameraKeyframe) p2;
+        CameraKeyframe k3 = (CameraKeyframe) p3;
+
+        Vector3d pos = Smoothing.position(kBefore.position, this.position, k1.position, k2.position, k3.position, tBefore, t0, t1, t2, t3, amount);
+        float yaw = (float) Smoothing.degrees(kBefore.yaw, this.yaw, k1.yaw, k2.yaw, k3.yaw, tBefore, t0, t1, t2, t3, amount);
+        float pitch = (float) Smoothing.degrees(kBefore.pitch, this.pitch, k1.pitch, k2.pitch, k3.pitch, tBefore, t0, t1, t2, t3, amount);
+        float roll = (float) Smoothing.degrees(kBefore.roll, this.roll, k1.roll, k2.roll, k3.roll, tBefore, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraPosition(pos, yaw, pitch, roll);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraKeyframe k1 = (CameraKeyframe) p1;
+        CameraKeyframe k2 = (CameraKeyframe) p2;
+
+        // Circular interpolation primarily happens between p1 and p2
+        Vector3d pos = Circular.position(k1.position, k2.position, amount);
+        float yaw = (float) Circular.degrees(k1.yaw, k2.yaw, amount);
+        float pitch = (float) Circular.degrees(k1.pitch, k2.pitch, amount);
+        float roll = (float) Circular.degrees(k1.roll, k2.roll, amount);
+
+        return new KeyframeChangeCameraPosition(pos, yaw, pitch, roll);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraKeyframe k1 = (CameraKeyframe) p1;
+        CameraKeyframe k2 = (CameraKeyframe) p2;
+        CameraKeyframe k3 = (CameraKeyframe) p3;
+
+        Vector3d pos = MonotoneCubic.position(this.position, k1.position, k2.position, k3.position, t0, t1, t2, t3, amount);
+        float yaw = (float) MonotoneCubic.degrees(this.yaw, k1.yaw, k2.yaw, k3.yaw, t0, t1, t2, t3, amount);
+        float pitch = (float) MonotoneCubic.degrees(this.pitch, k1.pitch, k2.pitch, k3.pitch, t0, t1, t2, t3, amount);
+        float roll = (float) MonotoneCubic.degrees(this.roll, k1.roll, k2.roll, k3.roll, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraPosition(pos, yaw, pitch, roll);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraKeyframe k1 = (CameraKeyframe) p1;
+        CameraKeyframe k2 = (CameraKeyframe) p2;
+        CameraKeyframe k3 = (CameraKeyframe) p3;
+
+        Vector3d pos = Nurbs.position(this.position, k1.position, k2.position, k3.position, t0, t1, t2, t3, amount);
+        float yaw = (float) Nurbs.degrees(this.yaw, k1.yaw, k2.yaw, k3.yaw, t0, t1, t2, t3, amount);
+        float pitch = (float) Nurbs.degrees(this.pitch, k1.pitch, k2.pitch, k3.pitch, t0, t1, t2, t3, amount);
+        float roll = (float) Nurbs.degrees(this.roll, k1.roll, k2.roll, k3.roll, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraPosition(pos, yaw, pitch, roll);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraKeyframe k1 = (CameraKeyframe) p1;
+        CameraKeyframe k2 = (CameraKeyframe) p2;
+
+        // Quintic (Smootherstep) is pairwise easing between p1 and p2
+        Vector3d pos = Quintic.position(k1.position, k2.position, amount);
+        float yaw = (float) Quintic.degrees(k1.yaw, k2.yaw, amount);
+        float pitch = (float) Quintic.degrees(k1.pitch, k2.pitch, amount);
+        float roll = (float) Quintic.degrees(k1.roll, k2.roll, amount);
+
+        return new KeyframeChangeCameraPosition(pos, yaw, pitch, roll);
     }
 
     @Override

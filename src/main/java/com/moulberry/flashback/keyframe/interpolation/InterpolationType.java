@@ -12,7 +12,13 @@ public enum InterpolationType implements ComboOption {
     EASE_OUT(SidedInterpolationType.LINEAR, SidedInterpolationType.EASE, "Ease Out (Linear In)"),
     EASE_IN_OUT(SidedInterpolationType.EASE, SidedInterpolationType.EASE, "Ease In/Out"),
     HOLD(SidedInterpolationType.HOLD, SidedInterpolationType.HOLD, "Hold"),
-    HERMITE(SidedInterpolationType.HERMITE, SidedInterpolationType.HERMITE, "Hermite");
+    HERMITE(SidedInterpolationType.HERMITE, SidedInterpolationType.HERMITE, "Hermite"),
+    AKIMA(SidedInterpolationType.AKIMA, SidedInterpolationType.AKIMA, "Akima"),
+    CIRCULAR(SidedInterpolationType.CIRCULAR, SidedInterpolationType.CIRCULAR, "Circular"),
+    MONOTONECUBIC(SidedInterpolationType.MONOTONECUBIC, SidedInterpolationType.MONOTONECUBIC, "MonotoneCubic"),
+    NURBS(SidedInterpolationType.NURBS, SidedInterpolationType.NURBS, "NURBS"),
+    QUINTIC(SidedInterpolationType.QUINTIC, SidedInterpolationType.QUINTIC, "Quintic"),
+    SMOOTHING(SidedInterpolationType.SMOOTHING, SidedInterpolationType.SMOOTHING, "SmoothingS");
 
     public static final InterpolationType[] INTERPOLATION_TYPES = values();
 
@@ -31,7 +37,13 @@ public enum InterpolationType implements ComboOption {
         "Ease Out (Linear In)",
         "Ease In/Out",
         "Hold",
-        "Hermite"
+        "Hermite",
+            "Akima",
+            "Circular",
+            "MonotoneCubic",
+            "Nurbs",
+            "Quintic",
+            "SmoothingS"
     };
 
     public final SidedInterpolationType leftSide;

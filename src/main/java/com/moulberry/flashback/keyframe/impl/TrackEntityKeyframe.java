@@ -18,6 +18,12 @@ import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.TrackEntityKeyframeType;
 import com.moulberry.flashback.spline.CatmullRom;
 import com.moulberry.flashback.spline.Hermite;
+import com.moulberry.flashback.spline.Akima;
+import com.moulberry.flashback.spline.Circular;
+import com.moulberry.flashback.spline.Smoothing;
+import com.moulberry.flashback.spline.MonotoneCubic;
+import com.moulberry.flashback.spline.Nurbs;
+import com.moulberry.flashback.spline.Quintic;
 import imgui.ImGui;
 import imgui.type.ImString;
 import net.minecraft.client.Minecraft;
@@ -128,6 +134,121 @@ public class TrackEntityKeyframe extends Keyframe {
     @Override
     public KeyframeChange createChange() {
         return new KeyframeChangeTrackEntity(this.target, this.trackingBodyPart, this.yawOffset, this.pitchOffset, this.positionOffset, this.viewOffset);
+    }
+
+    // --- 5-POINT INTERPOLATION (Akima, Smoothing) ---
+    // Context: pBefore -> this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        TrackEntityKeyframe kBefore = (TrackEntityKeyframe) pBefore;
+        TrackEntityKeyframe k1 = (TrackEntityKeyframe) p1;
+        TrackEntityKeyframe k2 = (TrackEntityKeyframe) p2;
+        TrackEntityKeyframe k3 = (TrackEntityKeyframe) p3;
+
+        // Discrete properties switch at 50%
+        UUID target = amount < 0.5 ? k1.target : k2.target;
+        TrackingBodyPart trackingBodyPart = amount < 0.5 ? k1.trackingBodyPart : k2.trackingBodyPart;
+
+        float yawOffset = (float) Akima.value(kBefore.yawOffset, this.yawOffset, k1.yawOffset, k2.yawOffset, k3.yawOffset, tBefore, t0, t1, t2, t3, amount);
+        float pitchOffset = (float) Akima.value(kBefore.pitchOffset, this.pitchOffset, k1.pitchOffset, k2.pitchOffset, k3.pitchOffset, tBefore, t0, t1, t2, t3, amount);
+
+        Vector3d positionOffset = Akima.position(kBefore.positionOffset, this.positionOffset, k1.positionOffset, k2.positionOffset, k3.positionOffset, tBefore, t0, t1, t2, t3, amount);
+        Vector3d viewOffset = Akima.position(kBefore.viewOffset, this.viewOffset, k1.viewOffset, k2.viewOffset, k3.viewOffset, tBefore, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeTrackEntity(target, trackingBodyPart, yawOffset, pitchOffset, positionOffset, viewOffset);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        TrackEntityKeyframe kBefore = (TrackEntityKeyframe) pBefore;
+        TrackEntityKeyframe k1 = (TrackEntityKeyframe) p1;
+        TrackEntityKeyframe k2 = (TrackEntityKeyframe) p2;
+        TrackEntityKeyframe k3 = (TrackEntityKeyframe) p3;
+
+        UUID target = amount < 0.5 ? k1.target : k2.target;
+        TrackingBodyPart trackingBodyPart = amount < 0.5 ? k1.trackingBodyPart : k2.trackingBodyPart;
+
+        float yawOffset = (float) Smoothing.value(kBefore.yawOffset, this.yawOffset, k1.yawOffset, k2.yawOffset, k3.yawOffset, tBefore, t0, t1, t2, t3, amount);
+        float pitchOffset = (float) Smoothing.value(kBefore.pitchOffset, this.pitchOffset, k1.pitchOffset, k2.pitchOffset, k3.pitchOffset, tBefore, t0, t1, t2, t3, amount);
+
+        Vector3d positionOffset = Smoothing.position(kBefore.positionOffset, this.positionOffset, k1.positionOffset, k2.positionOffset, k3.positionOffset, tBefore, t0, t1, t2, t3, amount);
+        Vector3d viewOffset = Smoothing.position(kBefore.viewOffset, this.viewOffset, k1.viewOffset, k2.viewOffset, k3.viewOffset, tBefore, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeTrackEntity(target, trackingBodyPart, yawOffset, pitchOffset, positionOffset, viewOffset);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TrackEntityKeyframe k1 = (TrackEntityKeyframe) p1;
+        TrackEntityKeyframe k2 = (TrackEntityKeyframe) p2;
+
+        UUID target = amount < 0.5 ? k1.target : k2.target;
+        TrackingBodyPart trackingBodyPart = amount < 0.5 ? k1.trackingBodyPart : k2.trackingBodyPart;
+
+        float yawOffset = (float) Circular.value(k1.yawOffset, k2.yawOffset, amount);
+        float pitchOffset = (float) Circular.value(k1.pitchOffset, k2.pitchOffset, amount);
+
+        Vector3d positionOffset = Circular.position(k1.positionOffset, k2.positionOffset, amount);
+        Vector3d viewOffset = Circular.position(k1.viewOffset, k2.viewOffset, amount);
+
+        return new KeyframeChangeTrackEntity(target, trackingBodyPart, yawOffset, pitchOffset, positionOffset, viewOffset);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TrackEntityKeyframe k1 = (TrackEntityKeyframe) p1;
+        TrackEntityKeyframe k2 = (TrackEntityKeyframe) p2;
+        TrackEntityKeyframe k3 = (TrackEntityKeyframe) p3;
+
+        UUID target = amount < 0.5 ? k1.target : k2.target;
+        TrackingBodyPart trackingBodyPart = amount < 0.5 ? k1.trackingBodyPart : k2.trackingBodyPart;
+
+        float yawOffset = (float) MonotoneCubic.value(this.yawOffset, k1.yawOffset, k2.yawOffset, k3.yawOffset, t0, t1, t2, t3, amount);
+        float pitchOffset = (float) MonotoneCubic.value(this.pitchOffset, k1.pitchOffset, k2.pitchOffset, k3.pitchOffset, t0, t1, t2, t3, amount);
+
+        Vector3d positionOffset = MonotoneCubic.position(this.positionOffset, k1.positionOffset, k2.positionOffset, k3.positionOffset, t0, t1, t2, t3, amount);
+        Vector3d viewOffset = MonotoneCubic.position(this.viewOffset, k1.viewOffset, k2.viewOffset, k3.viewOffset, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeTrackEntity(target, trackingBodyPart, yawOffset, pitchOffset, positionOffset, viewOffset);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TrackEntityKeyframe k1 = (TrackEntityKeyframe) p1;
+        TrackEntityKeyframe k2 = (TrackEntityKeyframe) p2;
+        TrackEntityKeyframe k3 = (TrackEntityKeyframe) p3;
+
+        UUID target = amount < 0.5 ? k1.target : k2.target;
+        TrackingBodyPart trackingBodyPart = amount < 0.5 ? k1.trackingBodyPart : k2.trackingBodyPart;
+
+        float yawOffset = (float) Nurbs.value(this.yawOffset, k1.yawOffset, k2.yawOffset, k3.yawOffset, t0, t1, t2, t3, amount);
+        float pitchOffset = (float) Nurbs.value(this.pitchOffset, k1.pitchOffset, k2.pitchOffset, k3.pitchOffset, t0, t1, t2, t3, amount);
+
+        Vector3d positionOffset = Nurbs.position(this.positionOffset, k1.positionOffset, k2.positionOffset, k3.positionOffset, t0, t1, t2, t3, amount);
+        Vector3d viewOffset = Nurbs.position(this.viewOffset, k1.viewOffset, k2.viewOffset, k3.viewOffset, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeTrackEntity(target, trackingBodyPart, yawOffset, pitchOffset, positionOffset, viewOffset);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TrackEntityKeyframe k1 = (TrackEntityKeyframe) p1;
+        TrackEntityKeyframe k2 = (TrackEntityKeyframe) p2;
+
+        UUID target = amount < 0.5 ? k1.target : k2.target;
+        TrackingBodyPart trackingBodyPart = amount < 0.5 ? k1.trackingBodyPart : k2.trackingBodyPart;
+
+        float yawOffset = (float) Quintic.value(k1.yawOffset, k2.yawOffset, amount);
+        float pitchOffset = (float) Quintic.value(k1.pitchOffset, k2.pitchOffset, amount);
+
+        Vector3d positionOffset = Quintic.position(k1.positionOffset, k2.positionOffset, amount);
+        Vector3d viewOffset = Quintic.position(k1.viewOffset, k2.viewOffset, amount);
+
+        return new KeyframeChangeTrackEntity(target, trackingBodyPart, yawOffset, pitchOffset, positionOffset, viewOffset);
     }
 
     @Override

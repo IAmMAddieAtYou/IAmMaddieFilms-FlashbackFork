@@ -120,6 +120,39 @@ public class SkinKeyframe extends Keyframe {
     }
 
     @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);
+    }
+
+    @Override
     public KeyframeChange createSmoothInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
 
         return new KeyframeChangePlayerSkin(this.entityUuid, this.skinIdentifier, this.isUuidSkin);

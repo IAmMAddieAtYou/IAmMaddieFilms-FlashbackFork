@@ -12,10 +12,10 @@ import com.moulberry.flashback.keyframe.change.KeyframeChangeTimeOfDay;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.TimeOfDayKeyframeType;
-import com.moulberry.flashback.spline.CatmullRom;
-import com.moulberry.flashback.spline.Hermite;
+import com.moulberry.flashback.spline.*;
 import imgui.ImGui;
 import imgui.type.ImInt;
+import org.joml.Vector3d;
 
 import java.lang.reflect.Type;
 import java.util.Map;
@@ -59,6 +59,70 @@ public class TimeOfDayKeyframe extends Keyframe {
     public KeyframeChange createChange() {
         return new KeyframeChangeTimeOfDay(this.time);
     }
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        TimeOfDayKeyframe kBefore = (TimeOfDayKeyframe) pBefore;
+        TimeOfDayKeyframe k1 = (TimeOfDayKeyframe) p1;
+        TimeOfDayKeyframe k2 = (TimeOfDayKeyframe) p2;
+        TimeOfDayKeyframe k3 = (TimeOfDayKeyframe) p3;
+
+        int timeOfDay = (int) Akima.value(kBefore.time, this.time, k1.time, k2.time, k3.time, tBefore, t0, t1, t2, t3, amount);
+        return new KeyframeChangeTimeOfDay(timeOfDay);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        TimeOfDayKeyframe kBefore = (TimeOfDayKeyframe) pBefore;
+        TimeOfDayKeyframe k1 = (TimeOfDayKeyframe) p1;
+        TimeOfDayKeyframe k2 = (TimeOfDayKeyframe) p2;
+        TimeOfDayKeyframe k3 = (TimeOfDayKeyframe) p3;
+
+        int timeOfDay = (int) Smoothing.value(kBefore.time, this.time, k1.time, k2.time, k3.time, tBefore, t0, t1, t2, t3, amount);
+        return new KeyframeChangeTimeOfDay(timeOfDay);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TimeOfDayKeyframe k1 = (TimeOfDayKeyframe) p1;
+        TimeOfDayKeyframe k2 = (TimeOfDayKeyframe) p2;
+
+        int timeOfDay = (int) Circular.value(k1.time, k2.time, amount);
+        return new KeyframeChangeTimeOfDay(timeOfDay);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TimeOfDayKeyframe k1 = (TimeOfDayKeyframe) p1;
+        TimeOfDayKeyframe k2 = (TimeOfDayKeyframe) p2;
+        TimeOfDayKeyframe k3 = (TimeOfDayKeyframe) p3;
+
+        int timeOfDay = (int) MonotoneCubic.value(this.time, k1.time, k2.time, k3.time, t0, t1, t2, t3, amount);
+        return new KeyframeChangeTimeOfDay(timeOfDay);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TimeOfDayKeyframe k1 = (TimeOfDayKeyframe) p1;
+        TimeOfDayKeyframe k2 = (TimeOfDayKeyframe) p2;
+        TimeOfDayKeyframe k3 = (TimeOfDayKeyframe) p3;
+
+        int timeOfDay = (int) Nurbs.value(this.time, k1.time, k2.time, k3.time, t0, t1, t2, t3, amount);
+        return new KeyframeChangeTimeOfDay(timeOfDay);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        TimeOfDayKeyframe k1 = (TimeOfDayKeyframe) p1;
+        TimeOfDayKeyframe k2 = (TimeOfDayKeyframe) p2;
+
+        int timeOfDay = (int) Quintic.value(k1.time, k2.time, amount);
+        return new KeyframeChangeTimeOfDay(timeOfDay);
+    }
+
 
     @Override
     public KeyframeChange createSmoothInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {

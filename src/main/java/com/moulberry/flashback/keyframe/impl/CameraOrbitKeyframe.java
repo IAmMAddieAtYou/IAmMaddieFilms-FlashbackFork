@@ -17,6 +17,12 @@ import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.CameraOrbitKeyframeType;
 import com.moulberry.flashback.spline.CatmullRom;
 import com.moulberry.flashback.spline.Hermite;
+import com.moulberry.flashback.spline.Akima;
+import com.moulberry.flashback.spline.Circular;
+import com.moulberry.flashback.spline.Smoothing;
+import com.moulberry.flashback.spline.MonotoneCubic;
+import com.moulberry.flashback.spline.Nurbs;
+import com.moulberry.flashback.spline.Quintic;
 import org.joml.Vector3d;
 
 import java.lang.reflect.Type;
@@ -94,6 +100,108 @@ public class CameraOrbitKeyframe extends Keyframe {
     public KeyframeChange createChange() {
         return createChangeFrom(this.center, this.distance, this.yaw, this.pitch);
     }
+
+
+    // --- 5-POINT INTERPOLATION (Akima, Smoothing) ---
+    // Context: pBefore -> this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        CameraOrbitKeyframe kBefore = (CameraOrbitKeyframe) pBefore;
+        CameraOrbitKeyframe k1 = (CameraOrbitKeyframe) p1;
+        CameraOrbitKeyframe k2 = (CameraOrbitKeyframe) p2;
+        CameraOrbitKeyframe k3 = (CameraOrbitKeyframe) p3;
+
+        // Position (Center)
+        Vector3d center = Akima.position(kBefore.center, this.center, k1.center, k2.center, k3.center, tBefore, t0, t1, t2, t3, amount);
+
+        // Values - Using .value() to allow multiple rotations
+        float dist = (float) Akima.value(kBefore.distance, this.distance, k1.distance, k2.distance, k3.distance, tBefore, t0, t1, t2, t3, amount);
+        float yaw = (float) Akima.value(kBefore.yaw, this.yaw, k1.yaw, k2.yaw, k3.yaw, tBefore, t0, t1, t2, t3, amount);
+        float pitch = (float) Akima.value(kBefore.pitch, this.pitch, k1.pitch, k2.pitch, k3.pitch, tBefore, t0, t1, t2, t3, amount);
+
+        return createChangeFrom(center, dist, yaw, pitch);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        CameraOrbitKeyframe kBefore = (CameraOrbitKeyframe) pBefore;
+        CameraOrbitKeyframe k1 = (CameraOrbitKeyframe) p1;
+        CameraOrbitKeyframe k2 = (CameraOrbitKeyframe) p2;
+        CameraOrbitKeyframe k3 = (CameraOrbitKeyframe) p3;
+
+        Vector3d center = Smoothing.position(kBefore.center, this.center, k1.center, k2.center, k3.center, tBefore, t0, t1, t2, t3, amount);
+
+        float dist = (float) Smoothing.value(kBefore.distance, this.distance, k1.distance, k2.distance, k3.distance, tBefore, t0, t1, t2, t3, amount);
+        float yaw = (float) Smoothing.value(kBefore.yaw, this.yaw, k1.yaw, k2.yaw, k3.yaw, tBefore, t0, t1, t2, t3, amount);
+        float pitch = (float) Smoothing.value(kBefore.pitch, this.pitch, k1.pitch, k2.pitch, k3.pitch, tBefore, t0, t1, t2, t3, amount);
+
+        return createChangeFrom(center, dist, yaw, pitch);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraOrbitKeyframe k1 = (CameraOrbitKeyframe) p1;
+        CameraOrbitKeyframe k2 = (CameraOrbitKeyframe) p2;
+
+        // Circular Pairwise
+        Vector3d center = Circular.position(k1.center, k2.center, amount);
+
+        float dist = (float) Circular.value(k1.distance, k2.distance, amount);
+        float yaw = (float) Circular.value(k1.yaw, k2.yaw, amount);
+        float pitch = (float) Circular.value(k1.pitch, k2.pitch, amount);
+
+        return createChangeFrom(center, dist, yaw, pitch);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraOrbitKeyframe k1 = (CameraOrbitKeyframe) p1;
+        CameraOrbitKeyframe k2 = (CameraOrbitKeyframe) p2;
+        CameraOrbitKeyframe k3 = (CameraOrbitKeyframe) p3;
+
+        Vector3d center = MonotoneCubic.position(this.center, k1.center, k2.center, k3.center, t0, t1, t2, t3, amount);
+
+        float dist = (float) MonotoneCubic.value(this.distance, k1.distance, k2.distance, k3.distance, t0, t1, t2, t3, amount);
+        float yaw = (float) MonotoneCubic.value(this.yaw, k1.yaw, k2.yaw, k3.yaw, t0, t1, t2, t3, amount);
+        float pitch = (float) MonotoneCubic.value(this.pitch, k1.pitch, k2.pitch, k3.pitch, t0, t1, t2, t3, amount);
+
+        return createChangeFrom(center, dist, yaw, pitch);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraOrbitKeyframe k1 = (CameraOrbitKeyframe) p1;
+        CameraOrbitKeyframe k2 = (CameraOrbitKeyframe) p2;
+        CameraOrbitKeyframe k3 = (CameraOrbitKeyframe) p3;
+
+        Vector3d center = Nurbs.position(this.center, k1.center, k2.center, k3.center, t0, t1, t2, t3, amount);
+
+        float dist = (float) Nurbs.value(this.distance, k1.distance, k2.distance, k3.distance, t0, t1, t2, t3, amount);
+        float yaw = (float) Nurbs.value(this.yaw, k1.yaw, k2.yaw, k3.yaw, t0, t1, t2, t3, amount);
+        float pitch = (float) Nurbs.value(this.pitch, k1.pitch, k2.pitch, k3.pitch, t0, t1, t2, t3, amount);
+
+        return createChangeFrom(center, dist, yaw, pitch);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraOrbitKeyframe k1 = (CameraOrbitKeyframe) p1;
+        CameraOrbitKeyframe k2 = (CameraOrbitKeyframe) p2;
+
+        // Quintic Pairwise
+        Vector3d center = Quintic.position(k1.center, k2.center, amount);
+
+        float dist = (float) Quintic.value(k1.distance, k2.distance, amount);
+        float yaw = (float) Quintic.value(k1.yaw, k2.yaw, amount);
+        float pitch = (float) Quintic.value(k1.pitch, k2.pitch, amount);
+
+        return createChangeFrom(center, dist, yaw, pitch);
+    }
+    
 
     @Override
     public KeyframeChange createSmoothInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {

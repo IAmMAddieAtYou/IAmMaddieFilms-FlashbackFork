@@ -17,8 +17,7 @@ import com.moulberry.flashback.keyframe.change.KeyframeChangeFov;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.keyframe.types.CameraShakeKeyframeType;
-import com.moulberry.flashback.spline.CatmullRom;
-import com.moulberry.flashback.spline.Hermite;
+import com.moulberry.flashback.spline.*;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import imgui.ImGui;
@@ -131,6 +130,93 @@ public class CameraShakeKeyframe extends Keyframe {
     @Override
     public KeyframeChange createChange() {
         return new KeyframeChangeCameraShake(this.frequencyX, this.amplitudeX, this.frequencyY, this.amplitudeY);
+    }
+
+    @Override
+    public KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        CameraShakeKeyframe kBefore = (CameraShakeKeyframe) pBefore;
+        CameraShakeKeyframe k1 = (CameraShakeKeyframe) p1;
+        CameraShakeKeyframe k2 = (CameraShakeKeyframe) p2;
+        CameraShakeKeyframe k3 = (CameraShakeKeyframe) p3;
+
+        float freqX = (float) Akima.value(kBefore.frequencyX, this.frequencyX, k1.frequencyX, k2.frequencyX, k3.frequencyX, tBefore, t0, t1, t2, t3, amount);
+        float ampX = (float) Akima.value(kBefore.amplitudeX, this.amplitudeX, k1.amplitudeX, k2.amplitudeX, k3.amplitudeX, tBefore, t0, t1, t2, t3, amount);
+        float freqY = (float) Akima.value(kBefore.frequencyY, this.frequencyY, k1.frequencyY, k2.frequencyY, k3.frequencyY, tBefore, t0, t1, t2, t3, amount);
+        float ampY = (float) Akima.value(kBefore.amplitudeY, this.amplitudeY, k1.amplitudeY, k2.amplitudeY, k3.amplitudeY, tBefore, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraShake(freqX, ampX, freqY, ampY);
+    }
+
+    @Override
+    public KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount) {
+        CameraShakeKeyframe kBefore = (CameraShakeKeyframe) pBefore;
+        CameraShakeKeyframe k1 = (CameraShakeKeyframe) p1;
+        CameraShakeKeyframe k2 = (CameraShakeKeyframe) p2;
+        CameraShakeKeyframe k3 = (CameraShakeKeyframe) p3;
+
+        float freqX = (float) Smoothing.value(kBefore.frequencyX, this.frequencyX, k1.frequencyX, k2.frequencyX, k3.frequencyX, tBefore, t0, t1, t2, t3, amount);
+        float ampX = (float) Smoothing.value(kBefore.amplitudeX, this.amplitudeX, k1.amplitudeX, k2.amplitudeX, k3.amplitudeX, tBefore, t0, t1, t2, t3, amount);
+        float freqY = (float) Smoothing.value(kBefore.frequencyY, this.frequencyY, k1.frequencyY, k2.frequencyY, k3.frequencyY, tBefore, t0, t1, t2, t3, amount);
+        float ampY = (float) Smoothing.value(kBefore.amplitudeY, this.amplitudeY, k1.amplitudeY, k2.amplitudeY, k3.amplitudeY, tBefore, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraShake(freqX, ampX, freqY, ampY);
+    }
+
+    // --- 4-POINT INTERPOLATION (Standard) ---
+    // Context: this -> p1 -> p2 -> p3
+
+    @Override
+    public KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraShakeKeyframe k1 = (CameraShakeKeyframe) p1;
+        CameraShakeKeyframe k2 = (CameraShakeKeyframe) p2;
+
+        float freqX = (float) Circular.value(k1.frequencyX, k2.frequencyX, amount);
+        float ampX = (float) Circular.value(k1.amplitudeX, k2.amplitudeX, amount);
+        float freqY = (float) Circular.value(k1.frequencyY, k2.frequencyY, amount);
+        float ampY = (float) Circular.value(k1.amplitudeY, k2.amplitudeY, amount);
+
+        return new KeyframeChangeCameraShake(freqX, ampX, freqY, ampY);
+    }
+
+    @Override
+    public KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraShakeKeyframe k1 = (CameraShakeKeyframe) p1;
+        CameraShakeKeyframe k2 = (CameraShakeKeyframe) p2;
+        CameraShakeKeyframe k3 = (CameraShakeKeyframe) p3;
+
+        float freqX = (float) MonotoneCubic.value(this.frequencyX, k1.frequencyX, k2.frequencyX, k3.frequencyX, t0, t1, t2, t3, amount);
+        float ampX = (float) MonotoneCubic.value(this.amplitudeX, k1.amplitudeX, k2.amplitudeX, k3.amplitudeX, t0, t1, t2, t3, amount);
+        float freqY = (float) MonotoneCubic.value(this.frequencyY, k1.frequencyY, k2.frequencyY, k3.frequencyY, t0, t1, t2, t3, amount);
+        float ampY = (float) MonotoneCubic.value(this.amplitudeY, k1.amplitudeY, k2.amplitudeY, k3.amplitudeY, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraShake(freqX, ampX, freqY, ampY);
+    }
+
+    @Override
+    public KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraShakeKeyframe k1 = (CameraShakeKeyframe) p1;
+        CameraShakeKeyframe k2 = (CameraShakeKeyframe) p2;
+        CameraShakeKeyframe k3 = (CameraShakeKeyframe) p3;
+
+        float freqX = (float) Nurbs.value(this.frequencyX, k1.frequencyX, k2.frequencyX, k3.frequencyX, t0, t1, t2, t3, amount);
+        float ampX = (float) Nurbs.value(this.amplitudeX, k1.amplitudeX, k2.amplitudeX, k3.amplitudeX, t0, t1, t2, t3, amount);
+        float freqY = (float) Nurbs.value(this.frequencyY, k1.frequencyY, k2.frequencyY, k3.frequencyY, t0, t1, t2, t3, amount);
+        float ampY = (float) Nurbs.value(this.amplitudeY, k1.amplitudeY, k2.amplitudeY, k3.amplitudeY, t0, t1, t2, t3, amount);
+
+        return new KeyframeChangeCameraShake(freqX, ampX, freqY, ampY);
+    }
+
+    @Override
+    public KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount) {
+        CameraShakeKeyframe k1 = (CameraShakeKeyframe) p1;
+        CameraShakeKeyframe k2 = (CameraShakeKeyframe) p2;
+
+        float freqX = (float) Quintic.value(k1.frequencyX, k2.frequencyX, amount);
+        float ampX = (float) Quintic.value(k1.amplitudeX, k2.amplitudeX, amount);
+        float freqY = (float) Quintic.value(k1.frequencyY, k2.frequencyY, amount);
+        float ampY = (float) Quintic.value(k1.amplitudeY, k2.amplitudeY, amount);
+
+        return new KeyframeChangeCameraShake(freqX, ampX, freqY, ampY);
     }
 
     @Override

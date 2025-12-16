@@ -31,6 +31,21 @@ public abstract class Keyframe {
 
     public void renderEditKeyframe(Consumer<Consumer<Keyframe>> update) {}
 
+    // --- 5-Point Interpolation (Akima, Smoothing) ---
+    public abstract KeyframeChange createAkimaInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount);
+
+    public abstract KeyframeChange createSmoothingInterpolatedChange(Keyframe pBefore, Keyframe p1, Keyframe p2, Keyframe p3, float tBefore, float t0, float t1, float t2, float t3, float amount);
+
+    // --- 4-Point Interpolation (Standard) ---
+
+    public abstract KeyframeChange createCircularInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount);
+
+    public abstract KeyframeChange createMonotoneCubicInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount);
+
+    public abstract KeyframeChange createNurbsInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount);
+
+    public abstract KeyframeChange createQuinticInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3, float t0, float t1, float t2, float t3, float amount);
+
     public static class TypeAdapter implements JsonSerializer<Keyframe>, JsonDeserializer<Keyframe> {
         @Override
         public Keyframe deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
