@@ -56,6 +56,10 @@ public class FlashbackConfig {
     @OptionDescription("flashback.option.hide_pause_menu_controls.description")
     public boolean hidePauseMenuControls = false;
 
+    @OptionCaption("flashback.option.record_command_bind")
+    @OptionDescription("flashback.option.record_command_bind.description")
+    public String recordcommandbind = "";
+
     @OptionCaption("flashback.option.mark_dimension_changes")
     @OptionDescription("flashback.option.mark_dimension_changes.description")
     public boolean markDimensionChanges = true;
@@ -102,6 +106,7 @@ public class FlashbackConfig {
     public boolean resetRng = false;
     public boolean ssaa = false;
     public boolean noGui = false;
+    public boolean depthexport;
 
     public VideoContainer container = null;
     public VideoCodec videoCodec = null;

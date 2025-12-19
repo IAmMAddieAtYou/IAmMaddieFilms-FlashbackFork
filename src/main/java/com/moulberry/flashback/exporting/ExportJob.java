@@ -2,12 +2,18 @@ package com.moulberry.flashback.exporting;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.moulberry.flashback.FlashbackSystemToasts;
+import net.irisshaders.iris.Iris;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
+import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
+import net.minecraft.client.gui.components.toasts.SystemToast;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.FreezeSlowdownFormula;
 import com.moulberry.flashback.Utils;
@@ -20,6 +26,7 @@ import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.TickrateKeyframeCapture;
+import com.moulberry.flashback.mixin.GameRendererAccessor;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.visuals.AccurateEntityPositionHandler;
@@ -46,13 +53,21 @@ import net.minecraft.world.phys.Vec3;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
+import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.openal.SOFTLoopback;
+import org.lwjgl.opengl.GL11;
+import com.moulberry.flashback.exporting.AsyncDepthVideoWriter;
+
+import java.lang.reflect.Field;
+import java.nio.FloatBuffer;
+import java.nio.ShortBuffer;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.nio.ShortBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -260,6 +275,16 @@ public class ExportJob {
     }
 
     private void doExport(VideoWriter videoWriter, SaveableFramebufferQueue downloader, TextureTarget infoRenderTarget, Path folder, String fn) {
+        AsyncDepthVideoWriter depthWriter = null;
+        ByteBuffer linearDepthBuffer = null;
+        FloatBuffer rawDepthBuffer = null;
+        float nearPlane = 0;
+        float farPlane = 0;
+        if(Flashback.getConfig().depthexport) {
+            // 3. Get Planes for Math
+             nearPlane = 0.05f;
+             farPlane = Minecraft.getInstance().options.renderDistance().get() * 16.0f;
+        }
         ReplayServer replayServer = Flashback.getReplayServer();
         if (replayServer == null) {
             return;
@@ -400,30 +425,10 @@ public class ExportJob {
                     keyframeData.put("roll", replayServer.saveroll);
 
                     // Get FOV (might need to get it from options or game settings)
-                    float currentOverrideFov = Flashback.getReplayServer().getEditorState().replayVisuals.overrideFovAmount;
-                    float keyframeStartFov = oldfov;
-                    float keyframeEndFov = replayServer.savefov; // This is the one that might be stale
 
-
-                    // We need a small tolerance (epsilon) for float comparison
-                    final float EPSILON = 0.001f;
-                    boolean isOverrideDifferent = Math.abs(currentOverrideFov - keyframeEndFov) > EPSILON;
-
-                    // --- This is how you should use the check ---
-
-                    // By default, assume the keyframe "end" value is our target
-                    float targetFov = keyframeEndFov;
-
-                    // BUT, if the override is different, it's the "newest" value and should win.
-                    // This makes the interpolation target the live editor value.
-                    if (isOverrideDifferent) {
-                        targetFov = currentOverrideFov;
-                    }
-
-                    // Now, perform your interpolation using the correct target
-                    float interpolatedFov = (float) (keyframeStartFov + (targetFov - keyframeStartFov) * partialClientTick);
-
-                    keyframeData.put("fov", interpolatedFov);
+                    double fov = ((GameRendererAccessor) Minecraft.getInstance().gameRenderer)
+                            .invokeGetFov(camera, deltaTicksFloat, true);
+                    keyframeData.put("fov", fov);
 
                     allCameraKeyframes.add(keyframeData);
                 }
@@ -511,6 +516,94 @@ public class ExportJob {
             Minecraft.getInstance().gameRenderer.render(timer, true);
             renderTimeNanos += System.nanoTime() - start;
 
+            if (Flashback.getConfig().depthexport) {
+
+                // 1. Get the Texture ID
+                int depthTexId = renderTarget.getDepthTextureId();
+                if (depthTexId > -1) {
+
+                    RenderSystem.bindTexture(depthTexId);
+
+                    // 2. QUERY REAL DIMENSIONS (The Critical Fix)
+                    // We ask the GPU: "How big is this texture actually?"
+                    int texW = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+                    int texH = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+
+                    // Safety fallback
+                    if (texW <= 0) texW = renderTarget.width;
+                    if (texH <= 0) texH = renderTarget.height;
+
+                    // 3. LAZY INIT WRITER
+                    // We only create the writer once we know the REAL texture size.
+                    if (depthWriter == null) {
+                        depthWriter = new AsyncDepthVideoWriter(
+                                folder.toString().replace(".mp4", "_depth.mkv"),
+                                texW,  // Use TEXTURE width, not Window width
+                                texH,
+                                this.settings.framerate()
+                        );
+                    }
+
+                    // 4. RESIZE BUFFERS (Using Texture Size)
+                    int neededSize = texW * texH;
+                    if (rawDepthBuffer == null || rawDepthBuffer.capacity() < neededSize) {
+                        rawDepthBuffer = BufferUtils.createFloatBuffer(neededSize);
+                        // ByteBuffer capacity = pixels * 2 bytes (16-bit)
+                        linearDepthBuffer = ByteBuffer.allocateDirect(neededSize * 2);
+                    }
+
+                    rawDepthBuffer.clear();
+                    linearDepthBuffer.clear();
+
+                    // 5. READ DATA
+                    // Force alignment to 1 to prevent any padding issues
+                    GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+                    GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, rawDepthBuffer);
+
+                    // 6. PROCESS LOOP
+                    // Iterate over the ACTUAL texture dimensions
+                    for (int i = 0; i < texW * texH; i++) {
+                        float z_b = rawDepthBuffer.get(i);
+
+                        // Handle Sky
+                        if (z_b == 1.0f) {
+                            int x = i % texW;
+                            int y = i / texW;
+                            int flippedIndex = ((texH - 1 - y) * texW + x) * 2;
+                            linearDepthBuffer.put(flippedIndex, (byte) 0xFF);
+                            linearDepthBuffer.put(flippedIndex + 1, (byte) 0xFF);
+                            continue;
+                        }
+
+                        // Linearize
+                        float z_ndc = 2.0f * z_b - 1.0f;
+                        float z_linear = (2.0f * nearPlane * farPlane) / (farPlane + nearPlane - z_ndc * (farPlane - nearPlane));
+                        float normalized = z_linear / farPlane;
+
+                        if (normalized > 1.0f) normalized = 1.0f;
+                        if (normalized < 0.0f) normalized = 0.0f;
+
+                        int val = (int)(normalized * 65535);
+
+                        // Manual Little Endian Swap
+                        byte lowByte = (byte)(val & 0xFF);
+                        byte highByte = (byte)((val >> 8) & 0xFF);
+
+                        int x = i % texW;
+                        int y = i / texW;
+                        int flippedIndex = ((texH - 1 - y) * texW + x) * 2;
+
+                        linearDepthBuffer.put(flippedIndex, lowByte);
+                        linearDepthBuffer.put(flippedIndex + 1, highByte);
+                    }
+
+                    linearDepthBuffer.position(0);
+                    linearDepthBuffer.limit(texW * texH * 2);
+
+                    // 7. ENCODE
+                    depthWriter.encode(linearDepthBuffer, texW, texH);
+                }
+            }
             renderTarget.unbindWrite();
 
             boolean cancel;
@@ -624,6 +717,14 @@ public class ExportJob {
 
         submitDownloadedFrames(videoWriter, downloader, true);
         videoWriter.finish();
+        if(Flashback.getConfig().depthexport) {
+            if (depthWriter != null) {
+                depthWriter.finish();
+                depthWriter.close();
+                SystemToast.add(Minecraft.getInstance().getToasts(), FlashbackSystemToasts.DEPTHMAP_TOAST,
+                        Component.literal("DepthMap Info!!"), Component.literal("In Blender/AE, multiply pixels by " + (farPlane) + " to restore real scale."));
+            }
+        }
     }
 
     private void updateRandoms(Random random, Random mathRandom) {

@@ -164,12 +164,16 @@ public class StartExportWindow {
                 }
             }
 
-            if(ImGui.checkbox("Export Camera Json File",config.cjson)){
+            if(ImGui.checkbox("Export Camera Json File",config.cjson)) {
                 config.cjson = !config.cjson;
             }
 
             if(ImGui.checkbox("Export Entity Tracking Json File",config.etjson)){
                 config.etjson = !config.etjson;
+            }
+
+            if(ImGui.checkbox("Export DepthMap", config.depthexport)){
+                config.depthexport = !config.depthexport;
             }
 
             ImGuiHelper.tooltip("Creates a Simple Json File with all the camera information for each frame of the exported video.");

@@ -13,4 +13,6 @@ public interface VideoWriter extends AutoCloseable {
     default void close() {
     }
 
+
+
 }

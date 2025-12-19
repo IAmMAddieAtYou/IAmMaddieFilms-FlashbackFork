@@ -59,6 +59,16 @@ public class KeyframeTrack {
 
         SidedInterpolationType leftInterpolation = lowerEntry.getValue().interpolationType().rightSide;
 
+        // SKIP strict keyframe snapping for approximate types (NURBS, SMOOTHING).
+        // These curves do not necessarily pass through the control points.
+        // Snapping to the keyframe at the exact tick causes a visual "jump".
+        boolean isApproximate = leftInterpolation == SidedInterpolationType.NURBS ||
+                leftInterpolation == SidedInterpolationType.SMOOTHING;
+
+        if (tick == lowerEntry.getKey() && !isApproximate) {
+            return lowerKeyframe.createChange();
+        }
+
         // Immediately apply hold
         if (leftInterpolation == SidedInterpolationType.HOLD) {
             return lowerKeyframe.createChange();
