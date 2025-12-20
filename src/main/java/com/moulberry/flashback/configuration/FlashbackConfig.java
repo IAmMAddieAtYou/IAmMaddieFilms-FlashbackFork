@@ -7,6 +7,7 @@ import com.moulberry.flashback.SneakyThrow;
 import com.moulberry.flashback.combo_options.AudioCodec;
 import com.moulberry.flashback.combo_options.VideoCodec;
 import com.moulberry.flashback.combo_options.VideoContainer;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHVISUALS;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.screen.select_replay.ReplaySorting;
 import net.fabricmc.loader.api.FabricLoader;
@@ -46,7 +47,7 @@ public class FlashbackConfig {
     @OptionDescription("flashback.option.quicksave.description")
     public boolean quicksave = false;
 
-
+    public DEPTHVISUALS depthinfo;
 
     public boolean cjson = false;
 

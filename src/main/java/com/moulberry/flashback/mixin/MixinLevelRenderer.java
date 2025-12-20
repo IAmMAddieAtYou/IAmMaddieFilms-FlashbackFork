@@ -13,11 +13,11 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.moulberry.flashback.Flashback;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHVISUALS;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.editor.ui.ReplayUI;
-import com.moulberry.flashback.exporting.PerfectFrames;
 import com.moulberry.flashback.visuals.ReplayVisuals;
 import com.moulberry.flashback.visuals.ShaderManager;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -30,12 +30,9 @@ import net.minecraft.client.particle.ParticleEngine;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
-import net.minecraft.client.renderer.chunk.RenderRegionCache;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleOptions;
-import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.biome.Biome;
@@ -52,6 +49,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Objects;
+
+import static com.moulberry.flashback.exporting.ExportJob.captureDepthFrame;
 
 @Mixin(value = LevelRenderer.class, priority = 1100)
 public abstract class MixinLevelRenderer {
@@ -78,7 +77,11 @@ public abstract class MixinLevelRenderer {
     public void renderLevel(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f projection, CallbackInfo ci) {
         ReplayUI.lastProjectionMatrix = projection;
         ReplayUI.lastViewQuaternion = camera.rotation();
+
+
     }
+
+
 
     @Unique
     private RenderTarget roundAlphaBuffer = null;
@@ -92,11 +95,34 @@ public abstract class MixinLevelRenderer {
 
     @Inject(method = "renderSectionLayer", at = @At("HEAD"), cancellable = true, require = 0)
     public void renderSectionLayer(RenderType renderType, double d, double e, double f, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
+
         EditorState editorState = EditorStateManager.getCurrent();
         if (editorState != null) {
             if (!editorState.replayVisuals.renderBlocks) {
                 ci.cancel();
             }
+        }
+    }
+
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V", ordinal = 2, shift = At.Shift.AFTER), require = 0)
+    public void renderLevel_AfterTerrain(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
+        if (Flashback.isExporting() && Flashback.getConfig().depthinfo == DEPTHVISUALS.LEVELS) {
+            captureDepthFrame();
+        }
+    }
+
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;endBatch(Lnet/minecraft/client/renderer/RenderType;)V", ordinal = 3, shift = At.Shift.AFTER), require = 0)
+    public void renderLevel_AfterEntities(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
+        // This includes BOTH Mobs and Players.
+        if (Flashback.isExporting() && (Flashback.getConfig().depthinfo == DEPTHVISUALS.ENTITIES)) {
+            captureDepthFrame();
+        }
+    }
+
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/FogRenderer;setupNoFog()V"), require = 0)
+    public void renderLevel_Final(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
+        if (Flashback.isExporting() && (Flashback.getConfig().depthinfo == DEPTHVISUALS.PARTICLES)) {
+            captureDepthFrame();
         }
     }
 
@@ -136,8 +162,14 @@ public abstract class MixinLevelRenderer {
             GlStateManager._enableBlend();
             GlStateManager._depthMask(true);
             GlStateManager._enableDepthTest();
+
         }
+
     }
+
+
+
+
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/FogRenderer;levelFogColor()V", shift = At.Shift.AFTER), require = 0)
     public void renderLevel_levelFogColor(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
@@ -165,23 +197,35 @@ public abstract class MixinLevelRenderer {
             }
 
         }
+
+
     }
 
     @WrapWithCondition(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/blockentity/BlockEntityRenderDispatcher;render(Lnet/minecraft/world/level/block/entity/BlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;)V"), require = 0)
     public boolean renderLevel_renderBlockEntity(BlockEntityRenderDispatcher instance, BlockEntity blockEntity, float f, PoseStack poseStack, MultiBufferSource multiBufferSource) {
         EditorState editorState = EditorStateManager.getCurrent();
+
         return editorState == null || editorState.replayVisuals.renderBlocks;
     }
 
+
+
+
+
     @WrapWithCondition(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderEntity(Lnet/minecraft/world/entity/Entity;DDDFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;)V"), require = 0)
     public boolean renderLevel_renderEntity(LevelRenderer instance, Entity entity, double d, double e, double f, float g, PoseStack poseStack, MultiBufferSource multiBufferSource) {
+
         EditorState editorState = EditorStateManager.getCurrent();
         if (entity instanceof Player) {
             return editorState == null || editorState.replayVisuals.renderPlayers;
         } else {
             return editorState == null || editorState.replayVisuals.renderEntities;
         }
+
+
     }
+
+
 
     @Unique
     private Biome.Precipitation forcePrecipitation = null;

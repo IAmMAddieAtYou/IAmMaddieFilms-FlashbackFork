@@ -4,7 +4,6 @@
   "plugin": "com.moulberry.mixinconstraints.ConstraintsMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "GameRendererAccessor",
     "MixinAbstractClientPlayer",
     "MixinDebugScreenOverlay",
     "MixinLevelRenderer",

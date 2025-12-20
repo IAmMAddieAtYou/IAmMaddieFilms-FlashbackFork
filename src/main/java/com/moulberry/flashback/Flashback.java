@@ -72,7 +72,6 @@ import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.*;
 import net.minecraft.server.packs.repository.PackRepository;
@@ -98,8 +97,6 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributeView;
@@ -570,6 +567,8 @@ public class Flashback implements ModInitializer, ClientModInitializer {
         }
         return incompatible;
     }
+
+
 
     public static List<String> getRecordingIncompatibleMods() {
         List<String> incompatible = new ArrayList<>();

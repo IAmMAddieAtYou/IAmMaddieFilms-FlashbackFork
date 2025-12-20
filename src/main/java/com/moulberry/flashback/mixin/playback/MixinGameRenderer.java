@@ -65,6 +65,7 @@ public abstract class MixinGameRenderer {
         if (Flashback.isExporting() && Flashback.EXPORT_JOB.getSettings().noGui()) {
             ci.cancel();
         }
+
     }
 
     @WrapOperation(method = "renderItemInHand", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;getPlayerMode()Lnet/minecraft/world/level/GameType;"))

@@ -10,7 +10,7 @@ import com.moulberry.flashback.combo_options.VideoContainer;
 import com.moulberry.flashback.configuration.FlashbackConfig;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.exporting.ExportJobQueue;
-import com.moulberry.flashback.state.EditorScene;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHVISUALS;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.editor.ui.ImGuiHelper;
@@ -18,7 +18,6 @@ import com.moulberry.flashback.exporting.AsyncFileDialogs;
 import com.moulberry.flashback.exporting.ExportJob;
 import com.moulberry.flashback.exporting.ExportSettings;
 import com.moulberry.flashback.playback.ReplayServer;
-import com.moulberry.flashback.state.KeyframeTrack;
 import imgui.ImGui;
 import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImString;
@@ -167,13 +166,28 @@ public class StartExportWindow {
             if(ImGui.checkbox("Export Camera Json File",config.cjson)) {
                 config.cjson = !config.cjson;
             }
+            ImGuiHelper.tooltip("Will export Camera Location and Position for use in Blender.");
 
             if(ImGui.checkbox("Export Entity Tracking Json File",config.etjson)){
                 config.etjson = !config.etjson;
             }
+            ImGuiHelper.tooltip("Will export Selected Entities Location and Position for use in Blender.");
 
             if(ImGui.checkbox("Export DepthMap", config.depthexport)){
                 config.depthexport = !config.depthexport;
+            }
+            ImGuiHelper.tooltip("Will export a normalized depth map for use in Blender or AE.");
+
+            DEPTHVISUALS[] depthSettings = { DEPTHVISUALS.LEVELS, DEPTHVISUALS.ENTITIES, DEPTHVISUALS.PARTICLES };
+
+
+            if (config.depthexport) {
+
+                DEPTHVISUALS newDepthInfo = ImGuiHelper.enumCombo("Depth Settings", config.depthinfo, depthSettings);
+
+                if (newDepthInfo != config.depthinfo) {
+                    config.depthinfo = newDepthInfo;
+                }
             }
 
             ImGuiHelper.tooltip("Creates a Simple Json File with all the camera information for each frame of the exported video.");
