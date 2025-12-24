@@ -31,6 +31,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.GameType;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -115,7 +116,20 @@ public abstract class MixinGameRenderer {
             ci.cancel();
         }
     }
+    
+    @Inject(method = "getProjectionMatrix", at = @At("RETURN"))
+    private void captureTrueProjection(double fov, CallbackInfoReturnable<Matrix4f> cir) {
+        Matrix4f projection = cir.getReturnValue();
 
+        // Perform your math here immediately
+        if (projection != null) {
+            float m11 = projection.m11(); // Verify your mappings for m11
+            float fovRadians = (float) (2 * Math.atan(1.0f / m11));
+            float fovDegrees = (float) Math.toDegrees(fovRadians);
+
+            //Flashback.savefov = fovDegrees;
+        }
+    }
     @Inject(method = "getFov", at = @At("HEAD"), cancellable = true)
     public void getFov(Camera camera, float f, boolean bl, CallbackInfoReturnable<Double> cir) {
         if (Flashback.isInReplay()) {
@@ -125,7 +139,8 @@ public abstract class MixinGameRenderer {
             }
             EditorState editorState = EditorStateManager.getCurrent();
             if (editorState != null && editorState.replayVisuals.overrideFov) {
-                ;
+
+
                 cir.setReturnValue((double) editorState.replayVisuals.overrideFovAmount);
             } else {
                 int fov = this.minecraft.options.fov().get().intValue();

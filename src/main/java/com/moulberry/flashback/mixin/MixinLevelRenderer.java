@@ -73,6 +73,8 @@ public abstract class MixinLevelRenderer {
         }
     }
 
+
+
     @Inject(method = "renderLevel", at = @At("HEAD"))
     public void renderLevel(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f projection, CallbackInfo ci) {
         ReplayUI.lastProjectionMatrix = projection;

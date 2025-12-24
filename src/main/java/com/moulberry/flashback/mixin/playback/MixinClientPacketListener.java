@@ -36,4 +36,16 @@ public class MixinClientPacketListener {
         }
     }
 
+    @Inject(method = "sendCommand", at = @At("HEAD"))
+    private void onSendCommand(String command, CallbackInfo ci) {
+
+        if (command.startsWith(Flashback.getConfig().recordcommandbind) && !Flashback.getConfig().recordcommandbind.isEmpty()) {
+            Flashback.startRecordingReplay();
+        }
+
+        if (command.startsWith(Flashback.getConfig().stopcommandbind) && !Flashback.getConfig().stopcommandbind.isEmpty()) {
+            Flashback.finishRecordingReplay();
+        }
+    }
+
 }

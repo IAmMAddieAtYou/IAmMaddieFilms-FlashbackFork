@@ -10,6 +10,10 @@
 
   "flashback.option.per_second": "%s/s",
 
+  "flashback.option.record_command_bind": "Start record command bind",
+  "flashback.option.record_command_bind.description": "Start recording once you trigger a command",
+  "flashback.option.stop_command_bind": "Stop record command bind",
+  "flashback.option.stop_command_bind.description": "Stop recording once you trigger a command",
   "flashback.option.automatically_start": "Automatically Start",
   "flashback.option.automatically_start.description": "Automatically starts a replay recording when joining a world/server",
   "flashback.option.automatically_finish": "Automatically Finish",

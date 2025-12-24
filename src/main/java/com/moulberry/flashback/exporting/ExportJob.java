@@ -9,7 +9,14 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
+import com.moulberry.flashback.keyframe.Keyframe;
+import com.moulberry.flashback.keyframe.change.KeyframeChange;
+import com.moulberry.flashback.keyframe.change.KeyframeChangeFov;
+import com.moulberry.flashback.state.EditorScene;
+import com.moulberry.flashback.state.KeyframeTrack;
+import com.moulberry.flashback.state.RealTimeMapping;
 import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.util.Mth;
 import org.lwjgl.opengl.GL11;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.FreezeSlowdownFormula;
@@ -84,6 +91,7 @@ public class ExportJob {
     private  static AsyncDepthVideoWriter depthWriter = null;
     private  static ByteBuffer linearDepthBuffer = null;
     private  static FloatBuffer rawDepthBuffer = null;
+
     private  static float nearPlane = 0;
     private  static float farPlane = 0;
     private int extraDummyFrames = 0;
@@ -349,6 +357,40 @@ public class ExportJob {
         return (float) rollDeg;
     }
 
+    public static float getExactFov(EditorScene scene, float currentTick, boolean useHighPrecision, RealTimeMapping mapping) {
+        // 1. Find the FOV Track
+        KeyframeTrack fovTrack = null;
+        for (KeyframeTrack track : scene.keyframeTracks) {
+            // Check if this track controls FOV.
+
+            if (track.enabled && track.keyframeType.keyframeChangeType() == KeyframeChangeFov.class) {
+                fovTrack = track;
+                break;
+            }
+        }
+
+        // Return default if no track is active
+        if (fovTrack == null) return 70.0f; // Default FOV
+
+
+        // If 'useHighPrecision' is true, we build the map. If false, we pass null (faster).
+        // 3. Ask the Track to Calculate the Value
+        KeyframeChange change = fovTrack.createKeyframeChange(currentTick, mapping);
+
+        if (change == null) {
+
+            return 70.0f;
+        }
+
+        if (change instanceof KeyframeChangeFov) {
+            return ((com.moulberry.flashback.keyframe.change.KeyframeChangeFov) change).fov();
+        }
+
+        return 70.0f;
+    }
+
+
+
     private void doExport(VideoWriter videoWriter, SaveableFramebufferQueue downloader, TextureTarget infoRenderTarget, Path folder, String fn) {
 
         if(Flashback.getConfig().depthexport) {
@@ -398,7 +440,6 @@ public class ExportJob {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
 
-        float oldfov = replayServer.savefov;
         for (int tickIndex = 0; tickIndex < ticks.size(); tickIndex++) {
             TickInfo tickInfo = ticks.get(tickIndex);
             boolean frozen = tickInfo.frozen;
@@ -437,7 +478,6 @@ public class ExportJob {
 
 
             AccurateEntityPositionHandler.apply(Minecraft.getInstance().level, timer);
-            oldfov = replayServer.savefov;
             KeyframeHandler keyframeHandler = new MinecraftKeyframeHandler(Minecraft.getInstance());
             this.settings.editorState().applyKeyframes(keyframeHandler, (float)(this.settings.startTick() + currentTickDouble));
 
@@ -491,6 +531,7 @@ public class ExportJob {
 
 
             if (Flashback.getConfig().cjson) {
+
                 Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
                 if (camera != null) {
 
@@ -505,9 +546,9 @@ public class ExportJob {
                     keyframeData.put("pitch", camera.getXRot() - replayServer.ShakeX);
                     keyframeData.put("roll", replayServer.saveroll);
 
-                    // Get FOV (might need to get it from options or game settings)
 
-                    double fov = 0;
+
+                    double fov = getExactFov(replayServer.getEditorState().getCurrentScene(replayServer.getEditorState().acquireRead()), (float) currentTickDouble,true,replayServer.getEditorState().realTimeMapping);
                     keyframeData.put("fov", fov);
 
                     allCameraKeyframes.add(keyframeData);

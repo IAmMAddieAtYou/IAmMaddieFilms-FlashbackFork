@@ -130,7 +130,7 @@ public class ReplayServer extends IntegratedServer {
     public static String REPLAY_VIEWER_NAME = "Replay Viewer";
     public static final int CHUNK_CACHE_SIZE = 10000;
     public float fov = 70;
-    public float savefov;
+
     public double saveroll = 0;
     public volatile int jumpToTick = -1;
     public volatile boolean replayPaused = true;

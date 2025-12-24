@@ -7,6 +7,7 @@ import com.moulberry.flashback.SneakyThrow;
 import com.moulberry.flashback.combo_options.AudioCodec;
 import com.moulberry.flashback.combo_options.VideoCodec;
 import com.moulberry.flashback.combo_options.VideoContainer;
+import com.moulberry.flashback.editor.ui.windows.StringValueSet;
 import com.moulberry.flashback.exporting.depthsettings.DEPTHVISUALS;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.screen.select_replay.ReplaySorting;
@@ -47,7 +48,7 @@ public class FlashbackConfig {
     @OptionDescription("flashback.option.quicksave.description")
     public boolean quicksave = false;
 
-    public DEPTHVISUALS depthinfo;
+    public DEPTHVISUALS depthinfo = DEPTHVISUALS.LEVELS;
 
     public boolean cjson = false;
 
@@ -56,10 +57,6 @@ public class FlashbackConfig {
     @OptionCaption("flashback.option.hide_pause_menu_controls")
     @OptionDescription("flashback.option.hide_pause_menu_controls.description")
     public boolean hidePauseMenuControls = false;
-
-    @OptionCaption("flashback.option.record_command_bind")
-    @OptionDescription("flashback.option.record_command_bind.description")
-    public String recordcommandbind = "";
 
     @OptionCaption("flashback.option.mark_dimension_changes")
     @OptionDescription("flashback.option.mark_dimension_changes.description")
@@ -78,6 +75,14 @@ public class FlashbackConfig {
     @OptionDescription("flashback.option.record_voice_chat.description")
     @OptionIfModLoaded("voicechat")
     public boolean recordVoiceChat = false;
+
+    @OptionCaption("flashback.option.record_command_bind")
+    @OptionDescription("flashback.option.record_command_bind.description")
+    public String recordcommandbind = "";
+
+    @OptionCaption("flashback.option.stop_command_bind")
+    @OptionDescription("flashback.option.stop_command_bind.description")
+    public String stopcommandbind = "";
 
     public Set<String> openedWindows = new HashSet<>();
     public long nextUnsupportedModLoaderWarning = 0;
@@ -175,7 +180,22 @@ public class FlashbackConfig {
                             throw SneakyThrow.sneakyThrow(e);
                         }
                     }));
-                } else if (field.getType() == int.class) {
+                } else if (field.getType() == String.class) {
+                    options.add(new OptionInstance<>(
+                            caption.value(),
+                            tooltipSupplier,
+                            (component, value) -> Component.literal(value),
+                            new StringValueSet(),
+                            (String) field.get(this),
+                            (value) -> {
+                                try {
+                                    field.set(this, value);
+                                } catch (Exception e) {
+                                    throw SneakyThrow.sneakyThrow(e);
+                                }
+                            }
+                    ));
+                }else if (field.getType() == int.class) {
                     OptionIntRange range = field.getDeclaredAnnotation(OptionIntRange.class);
                     if (range == null) {
                         continue;

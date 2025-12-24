@@ -62,7 +62,7 @@ public class FOVKeyframe extends Keyframe {
 
     @Override
     public KeyframeChange createChange() {
-        Flashback.getReplayServer().savefov = this.fov;
+        
         return new KeyframeChangeFov(this.fov);
     }
 
@@ -79,7 +79,7 @@ public class FOVKeyframe extends Keyframe {
         float focalLength = (float) Akima.value(fBefore, f0, f1, f2, f3, tBefore, t0, t1, t2, t3, amount);
         float fov = Utils.focalLengthToFov(focalLength);
 
-        Flashback.getReplayServer().savefov = fov;
+        
         return new KeyframeChangeFov(fov);
     }
 
@@ -94,7 +94,7 @@ public class FOVKeyframe extends Keyframe {
         float focalLength = (float) Smoothing.value(fBefore, f0, f1, f2, f3, tBefore, t0, t1, t2, t3, amount);
         float fov = Utils.focalLengthToFov(focalLength);
 
-        Flashback.getReplayServer().savefov = fov;
+        
         return new KeyframeChangeFov(fov);
     }
 
@@ -109,7 +109,7 @@ public class FOVKeyframe extends Keyframe {
         float focalLength = (float) Circular.value(f1, f2, amount);
         float fov = Utils.focalLengthToFov(focalLength);
 
-        Flashback.getReplayServer().savefov = fov;
+        
         return new KeyframeChangeFov(fov);
     }
 
@@ -123,7 +123,7 @@ public class FOVKeyframe extends Keyframe {
         float focalLength = (float) MonotoneCubic.value(f0, f1, f2, f3, t0, t1, t2, t3, amount);
         float fov = Utils.focalLengthToFov(focalLength);
 
-        Flashback.getReplayServer().savefov = fov;
+        
         return new KeyframeChangeFov(fov);
     }
 
@@ -137,7 +137,7 @@ public class FOVKeyframe extends Keyframe {
         float focalLength = (float) Nurbs.value(f0, f1, f2, f3, t0, t1, t2, t3, amount);
         float fov = Utils.focalLengthToFov(focalLength);
 
-        Flashback.getReplayServer().savefov = fov;
+        
         return new KeyframeChangeFov(fov);
     }
 
@@ -149,7 +149,7 @@ public class FOVKeyframe extends Keyframe {
         float focalLength = (float) Quintic.value(f1, f2, amount);
         float fov = Utils.focalLengthToFov(focalLength);
 
-        Flashback.getReplayServer().savefov = fov;
+        
         return new KeyframeChangeFov(fov);
     }
 
@@ -165,14 +165,13 @@ public class FOVKeyframe extends Keyframe {
         float f3 = Utils.fovToFocalLength(((FOVKeyframe)p3).fov);
 
         float focalLength = CatmullRom.value(f0, f1, f2, f3, time1, time2, time3, amount);
-        Flashback.getReplayServer().savefov = Utils.focalLengthToFov(focalLength);
         return new KeyframeChangeFov(Utils.focalLengthToFov(focalLength));
     }
 
     @Override
     public KeyframeChange createHermiteInterpolatedChange(Map<Float, Keyframe> keyframes, float amount) {
         float focalLength = (float) Hermite.value(Maps.transformValues(keyframes, k -> (double) Utils.fovToFocalLength(((FOVKeyframe)k).fov)), amount);
-        Flashback.getReplayServer().savefov = Utils.focalLengthToFov(focalLength);
+
         return new KeyframeChangeFov(Utils.focalLengthToFov(focalLength));
     }
 

@@ -5,11 +5,17 @@ accessible class net/minecraft/client/OptionInstance$IntRangeBase
 
 # Client data
 accessible class net/minecraft/client/multiplayer/ClientChunkCache$Storage
+
+accessible method net/minecraft/client/renderer/GameRenderer getFov (Lnet/minecraft/client/Camera;FZ)D
 accessible field net/minecraft/client/multiplayer/ClientChunkCache storage Lnet/minecraft/client/multiplayer/ClientChunkCache$Storage;
 accessible field net/minecraft/client/multiplayer/ClientChunkCache$Storage chunks Ljava/util/concurrent/atomic/AtomicReferenceArray;
 accessible field net/minecraft/world/level/biome/BiomeManager biomeZoomSeed J
 accessible field net/minecraft/client/multiplayer/ClientLevel mapData Ljava/util/Map;
-
+accessible class net/minecraft/client/OptionInstance$ValueSet
+accessible field net/minecraft/client/OptionInstance caption Lnet/minecraft/network/chat/Component;
+accessible method net/minecraft/client/OptionInstance$ValueSet createButton (Lnet/minecraft/client/OptionInstance$TooltipSupplier;Lnet/minecraft/client/Options;IIILjava/util/function/Consumer;)Ljava/util/function/Function;
+accessible method net/minecraft/client/OptionInstance$ValueSet validateValue (Ljava/lang/Object;)Ljava/util/Optional;
+accessible method net/minecraft/client/OptionInstance$ValueSet codec ()Lcom/mojang/serialization/Codec;
 accessible method net/minecraft/tags/TagNetworkSerialization serializeToNetwork (Lnet/minecraft/core/Registry;)Lnet/minecraft/tags/TagNetworkSerialization$NetworkPayload;
 
 accessible field net/minecraft/world/entity/LivingEntity lerpHeadSteps I

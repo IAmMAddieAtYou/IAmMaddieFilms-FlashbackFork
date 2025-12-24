@@ -35,7 +35,7 @@ public class EditorState {
     volatile transient boolean dirty = false;
     public volatile transient int modCount = ThreadLocalRandom.current().nextInt();
     private volatile transient int lastRealTimeMappingModCount = this.modCount;
-    private volatile transient RealTimeMapping realTimeMapping = null;
+    public volatile transient RealTimeMapping realTimeMapping = null;
 
     public final ReplayVisuals replayVisuals = new ReplayVisuals();
 

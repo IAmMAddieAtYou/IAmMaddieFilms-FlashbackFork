@@ -59,13 +59,13 @@ public class AsyncFFmpegVideoWriter implements AutoCloseable, VideoWriter {
         int width = settings.resolutionX();
         int height = settings.resolutionY();
 
-        final int maxResolutionArea = 3840 * 2160;
-        if (width*height > maxResolutionArea) {
-            double factor = (width*height) / (double) maxResolutionArea;
-            factor = Math.sqrt(factor);
-            width = (int) Math.floor(width / factor);
-            height = (int) Math.floor(height / factor);
-        }
+//        final int maxResolutionArea = 3840 * 2160;
+//        if (width*height > maxResolutionArea) {
+//            double factor = (width*height) / (double) maxResolutionArea;
+//            factor = Math.sqrt(factor);
+//            width = (int) Math.floor(width / factor);
+//            height = (int) Math.floor(height / factor);
+//        }
 
         int maxBitrate = Math.min(288_000_000, 5000 + (int) Math.ceil(width * height * settings.framerate()));
 

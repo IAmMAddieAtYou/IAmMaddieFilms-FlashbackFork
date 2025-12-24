@@ -127,7 +127,6 @@ public class Flashback implements ModInitializer, ClientModInitializer {
     private static int delayedStartRecording = 0;
     private static boolean delayedOpenConfig = false;
     private static volatile boolean isInReplay = false;
-
     public static boolean supportsDistantHorizons = false;
 
     private static final List<Path> pendingReplaySave = new ArrayList<>();

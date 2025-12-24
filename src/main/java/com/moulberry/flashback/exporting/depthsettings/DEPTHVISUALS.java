@@ -6,7 +6,7 @@ public enum DEPTHVISUALS implements ComboOption {
 
     LEVELS("Show World Only"),
     ENTITIES("Show World and Entities"),
-    PARTICLES("Show World, Entities and Particles.");
+    PARTICLES("Show World, Entities and Particles");
 
     private final String text;
 
