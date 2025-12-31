@@ -21,8 +21,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.nio.IntBuffer;
 import java.util.Objects;
 
 @Mixin(value = RenderTarget.class, priority = 800)
@@ -30,6 +32,25 @@ public abstract class MixinRenderTarget {
 
     @Shadow
     public int colorTextureId;
+
+    @Redirect(
+            method = "createBuffers", // <--- Base class uses 'createBuffers', not 'allocateDepthAttachment'
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/platform/GlStateManager;_texImage2D(IIIIIIIILjava/nio/IntBuffer;)V"
+            ),
+            remap = true
+    )
+    private void forceFloatDepthBuffer(int target, int level, int internalFormat, int width, int height, int border, int format, int type, IntBuffer pixels) {
+
+        // Debug to catch the Recorder
+        if (format == GL30.GL_DEPTH_COMPONENT) {
+            System.out.println("Flashback Mixin (RenderTarget): Upgrading Depth to 32-bit Float!");
+            GlStateManager._texImage2D(target, level, GL30.GL_DEPTH_COMPONENT32F, width, height, border, format, GL11.GL_FLOAT, pixels);
+        } else {
+            GlStateManager._texImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
+        }
+    }
 
     @Inject(method = "blitToScreen(IIZ)V", at = @At("HEAD"), cancellable = true)
     public void blitToScreenSodium(int width, int height, boolean noBlend, CallbackInfo ci) {

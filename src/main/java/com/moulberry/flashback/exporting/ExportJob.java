@@ -55,6 +55,7 @@ import org.joml.Quaternionf;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.openal.SOFTLoopback;
+import org.lwjgl.opengl.GL30;
 
 import java.nio.FloatBuffer;
 import java.io.FileWriter;
@@ -261,101 +262,86 @@ public class ExportJob {
     public static void captureDepthFrame() {
         if (!Flashback.getConfig().depthexport) return;
 
-        // 1. Get the Texture ID
         int depthTexId = exportrenderTarget.getDepthTextureId();
         if (depthTexId > -1) {
 
             RenderSystem.bindTexture(depthTexId);
 
-            // 2. QUERY REAL DIMENSIONS (The Critical Fix)
+            int actualFormat = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
+
+
+
+            int oldPackAlignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
+            int oldPackRowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
 
             int texW = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
             int texH = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
 
-            // Safety fallback
+
+
+
             if (texW <= 0) texW = exportrenderTarget.width;
             if (texH <= 0) texH = exportrenderTarget.height;
 
-            // 3. LAZY INIT WRITER
-            // We only create the writer once we know the REAL texture size.
-
-
-            // 4. RESIZE BUFFERS (Using Texture Size)
             int neededSize = texW * texH;
+
+            // Allocate 4 bytes per pixel (Float) instead of 2 (Short) ---
             if (rawDepthBuffer == null || rawDepthBuffer.capacity() < neededSize) {
                 rawDepthBuffer = BufferUtils.createFloatBuffer(neededSize);
-                linearDepthBuffer = ByteBuffer.allocateDirect(neededSize * 2);
-                // FORCE LITTLE ENDIAN HERE
+                // 4 bytes per float
+                linearDepthBuffer = ByteBuffer.allocateDirect(neededSize * 4);
                 linearDepthBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
             }
 
             rawDepthBuffer.clear();
             linearDepthBuffer.clear();
 
-            // 5. READ DATA
-            // Force alignment to 1 to prevent any padding issues
             GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+            GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
             GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, rawDepthBuffer);
 
-            // 6. PROCESS LOOP
-            // Iterate over the ACTUAL texture dimensions
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, oldPackAlignment);
+            GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, oldPackRowLength);
+
+
+            float mathNearPlane = 0.05f;
+            float mathFarPlane = farPlane;
+
             for (int i = 0; i < texW * texH; i++) {
                 float z_b = rawDepthBuffer.get(i);
 
-                // Handle Sky
-                if (z_b == 1.0f) {
-                    int x = i % texW;
-                    int y = i / texW;
-                    int flippedIndex = ((texH - 1 - y) * texW + x) * 2;
-                    linearDepthBuffer.put(flippedIndex, (byte) 0xFF);
-                    linearDepthBuffer.put(flippedIndex + 1, (byte) 0xFF);
+                // Calculate index
+                int x = i % texW;
+                int y = i / texW;
+
+                // -Jump by 4 bytes instead of 2 ---
+                int flippedIndex = ((texH - 1 - y) * texW + x) * 4;
+
+                if (z_b >= 1f) {
+
+                    linearDepthBuffer.putFloat(flippedIndex, 10000.0f);
                     continue;
                 }
 
                 // Linearize
                 float z_ndc = 2.0f * z_b - 1.0f;
-                float z_linear = (2.0f * nearPlane * farPlane) / (farPlane + nearPlane - z_ndc * (farPlane - nearPlane));
-                float normalized = z_linear / farPlane;
+                float z_linear = (2.0f * mathNearPlane * mathFarPlane) / (mathFarPlane + mathNearPlane - z_ndc * (mathFarPlane - mathNearPlane));
 
-                if (normalized > 1.0f) normalized = 1.0f;
-                if (normalized < 0.0f) normalized = 0.0f;
-
-                int val = (int)(normalized * 65535);
-
-                int x = i % texW;
-                int y = i / texW;
-                int flippedIndex = ((texH - 1 - y) * texW + x) * 2; // *2 because we are jumping by bytes
-
-
-                linearDepthBuffer.putShort(flippedIndex, (short) val);
+                // Write Real Scale directly
+                linearDepthBuffer.putFloat(flippedIndex, z_linear);
             }
 
             linearDepthBuffer.position(0);
-            linearDepthBuffer.limit(texW * texH * 2);
+            // Limit is now * 4
+            linearDepthBuffer.limit(texW * texH * 4);
 
             // 7. ENCODE
+
             depthWriter.encode(linearDepthBuffer, texW, texH);
         }
     }
 
-    public float getRollFromQuaternion(Quaternionf q) {
-        // We use double for the intermediate math for better precision
-        // Formula for roll (Z-axis rotation)
-        double sinr_cosp = 2.0 * (q.w * q.z + q.x * q.y);
-        double cosr_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
 
-        // Calculate the angle in radians using atan2
-        // Math.atan2 handles all quadrants and edge cases
-        double rollRad = Math.atan2(sinr_cosp, cosr_cosp);
-
-        // Convert radians to degrees
-        // Math.toDegrees(rad) is equivalent to (rad * 180.0 / Math.PI)
-        // The result is already in the -180 to 180 range.
-        double rollDeg = Math.toDegrees(rollRad);
-
-        // Cast to float as requested
-        return (float) rollDeg;
-    }
 
     public static float getExactFov(EditorScene scene, float currentTick, boolean useHighPrecision, RealTimeMapping mapping) {
         // 1. Find the FOV Track
@@ -405,7 +391,7 @@ public class ExportJob {
                     folder.toString().replace(".mp4", "_depth.mkv"),
                     width,
                     height,
-                    this.settings.framerate()
+                    this.settings.framerate(),nearPlane,farPlane
             );
         }
         ReplayServer replayServer = Flashback.getReplayServer();
@@ -754,7 +740,8 @@ public class ExportJob {
                 depthWriter.finish();
                 depthWriter.close();
                 SystemToast.add(Minecraft.getInstance().getToasts(), FlashbackSystemToasts.DEPTHMAP_TOAST,
-                        Component.literal("DepthMap Info!!"), Component.literal("In Blender/AE, multiply pixels by " + (farPlane) + " to restore real scale."));
+                        Component.literal("DepthMap Saved"),
+                        Component.literal("Format is 32-bit Float. Units = Real World Blocks."));
             }
         }
     }

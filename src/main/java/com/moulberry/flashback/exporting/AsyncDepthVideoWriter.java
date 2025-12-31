@@ -8,9 +8,7 @@ import org.bytedeco.javacv.FFmpegFrameRecorder;
 import org.bytedeco.javacv.Frame;
 import org.lwjgl.system.MemoryUtil;
 
-import java.io.File;
 import java.nio.ByteBuffer;
-import java.nio.ShortBuffer;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,42 +18,48 @@ import java.util.concurrent.locks.LockSupport;
 public class AsyncDepthVideoWriter implements AutoCloseable {
 
     private final ArrayBlockingQueue<DepthFrame> encodeQueue;
-    private final ArrayBlockingQueue<Long> reusePictureData; // Object pool for memory addresses
+    private final ArrayBlockingQueue<Long> reusePictureData;
 
     private final AtomicBoolean finishEncodeThread = new AtomicBoolean(false);
     private final AtomicBoolean finishedWriting = new AtomicBoolean(false);
     private final AtomicReference<Throwable> threadedError = new AtomicReference<>(null);
 
-    // Simple record to hold the native pointer to the frame data
     private record DepthFrame(long pointer, int size, int width, int height) implements AutoCloseable {
         public void close() {
             MemoryUtil.nmemFree(this.pointer);
         }
     }
 
-    public AsyncDepthVideoWriter(String filename, int width, int height, double fps) {
-        // Force settings for Depth: MKV container, FFV1 codec, Gray16LE pixel format
+    public AsyncDepthVideoWriter(String filename, int width, int height, double fps, float nearPlane, float farPlane) {
         try {
-            // Ensure filename ends in .mkv
-            if (!filename.endsWith(".mkv")) filename += ".mkv";
+            // Force .mov extension for Raw Video container
+            if (filename.contains(".")) {
+                filename = filename.substring(0, filename.lastIndexOf('.'));
+            }
+            filename += ".mov";
 
-            Flashback.LOGGER.info("Starting Depth Pass Export: " + filename);
+            Flashback.LOGGER.info("Starting RAW Float Depth Export: " + filename);
+            Flashback.LOGGER.info("WARNING: High Bandwidth Required (~740 MB/s)");
 
             final FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(filename, width, height, 0);
 
-            recorder.setVideoCodec(avcodec.AV_CODEC_ID_FFV1); // Lossless codec
-            recorder.setFormat("matroska");
+            // --- SETTINGS FOR RAW FLOAT MOV ---
+            recorder.setFormat("mov");
+            recorder.setVideoCodec(avcodec.AV_CODEC_ID_RAWVIDEO); // Uncompressed
+            recorder.setPixelFormat(avutil.AV_PIX_FMT_GRAYF32LE); // 32-bit Float
             recorder.setFrameRate(fps);
-            recorder.setPixelFormat(avutil.AV_PIX_FMT_GRAY16LE); // 16-bit Grayscale
 
-            // GOP size can be large for FFV1
-            recorder.setGopSize((int) Math.max(20, Math.min(240, Math.ceil(fps * 2))));
+            recorder.setMetadata("comment", "Flashback Depth Pass | Near: " + nearPlane + " | Far: " + farPlane);
+
+            recorder.setMetadata("clip_start", String.valueOf(nearPlane));
+            recorder.setMetadata("clip_end", String.valueOf(farPlane));
+            // No GOP size needed for raw video
 
             recorder.start();
 
-            // Queue setup
-            this.encodeQueue = new ArrayBlockingQueue<>(32);
-            this.reusePictureData = new ArrayBlockingQueue<>(32);
+            // Queue setup (Reduced queue size to save RAM since frames are huge)
+            this.encodeQueue = new ArrayBlockingQueue<>(16);
+            this.reusePictureData = new ArrayBlockingQueue<>(16);
 
             Thread encodeThread = createEncodeThread(recorder);
             encodeThread.start();
@@ -87,17 +91,22 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
                         }
                     }
 
-                    // Wrap the native pointer in a ByteBuffer for JavaCV to read
                     ByteBuffer buffer = MemoryUtil.memByteBuffer(src.pointer, src.size);
 
-                    // Record the image
-                    // depth=FRAME.DEPTH_SHORT (16-bit), channels=1, stride=width*2 bytes
-                    recorder.recordImage(src.width, src.height, Frame.DEPTH_SHORT, 1, src.width * 2, avutil.AV_PIX_FMT_GRAY16LE, buffer);
+                    // RECORDING 32-BIT FLOAT
+                    recorder.recordImage(
+                            src.width,
+                            src.height,
+                            Frame.DEPTH_FLOAT,
+                            1,
+                            src.width * 4, // Stride = Width * 4 Bytes
+                            avutil.AV_PIX_FMT_GRAYF32LE,
+                            buffer
+                    );
 
-                    // Reuse memory if possible
                     if (this.reusePictureData != null) {
                         if (this.reusePictureData.offer(src.pointer)) {
-                            src = null; // Prevent closing/freeing
+                            src = null;
                         }
                     }
 
@@ -122,14 +131,14 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
 
         if (this.finishEncodeThread.get()) throw new IllegalStateException("Cannot encode after finish()");
 
-        int sizeBytes = width * height * 2;
+        // 4 BYTES PER PIXEL
+        int sizeBytes = width * height * 4;
 
         Long ptr = this.reusePictureData.poll();
         if (ptr == null) {
             ptr = MemoryUtil.nmemAlloc(sizeBytes);
         }
 
-        // UPDATED LINE: Use memByteBuffer instead of memShortBuffer
         MemoryUtil.memByteBuffer(ptr, sizeBytes).put(src);
 
         src.rewind();
@@ -155,7 +164,6 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
     @Override
     public void close() {
         finish();
-        // Cleanup memory pool
         for (Long ptr : this.reusePictureData) {
             if (ptr != null && ptr != 0) MemoryUtil.nmemFree(ptr);
         }
