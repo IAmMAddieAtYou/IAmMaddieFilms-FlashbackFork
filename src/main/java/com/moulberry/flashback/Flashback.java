@@ -14,6 +14,7 @@ import com.moulberry.flashback.compat.simple_voice_chat.SimpleVoiceChatPlayback;
 import com.moulberry.flashback.configuration.FlashbackConfig;
 import com.moulberry.flashback.exporting.AsyncFileDialogs;
 import com.moulberry.flashback.exporting.ExportJob;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHEXPORT;
 import com.moulberry.flashback.exporting.taskbar.TaskbarManager;
 import com.moulberry.flashback.ext.MinecraftExt;
 import com.moulberry.flashback.keyframe.KeyframeRegistry;
@@ -128,7 +129,7 @@ public class Flashback implements ModInitializer, ClientModInitializer {
     private static boolean delayedOpenConfig = false;
     private static volatile boolean isInReplay = false;
     public static boolean supportsDistantHorizons = false;
-
+    public static DEPTHEXPORT depthprecision;
     private static final List<Path> pendingReplaySave = new ArrayList<>();
     private static final List<Path> pendingReplayRecovery = new ArrayList<>();
     private static List<String> pendingUnsupportedModsForRecording = null;

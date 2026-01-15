@@ -2,13 +2,14 @@ package com.moulberry.flashback.exporting;
 
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.SneakyThrow;
-import org.bytedeco.ffmpeg.global.avcodec;
-import org.bytedeco.ffmpeg.global.avutil;
-import org.bytedeco.javacv.FFmpegFrameRecorder;
-import org.bytedeco.javacv.Frame;
 import org.lwjgl.system.MemoryUtil;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.channels.FileChannel;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,53 +25,38 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
     private final AtomicBoolean finishedWriting = new AtomicBoolean(false);
     private final AtomicReference<Throwable> threadedError = new AtomicReference<>(null);
 
-    private record DepthFrame(long pointer, int size, int width, int height) implements AutoCloseable {
+    private final File outputDir;
+    private int frameCounter = 0;
+
+    private record DepthFrame(long pointer, int size, int width, int height, int frameIndex) implements AutoCloseable {
         public void close() {
             MemoryUtil.nmemFree(this.pointer);
         }
     }
 
-    public AsyncDepthVideoWriter(String filename, int width, int height, double fps, float nearPlane, float farPlane) {
-        try {
-            // Force .mov extension for Raw Video container
-            if (filename.contains(".")) {
-                filename = filename.substring(0, filename.lastIndexOf('.'));
-            }
-            filename += ".mov";
-
-            Flashback.LOGGER.info("Starting RAW Float Depth Export: " + filename);
-            Flashback.LOGGER.info("WARNING: High Bandwidth Required (~740 MB/s)");
-
-            final FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(filename, width, height, 0);
-
-            // --- SETTINGS FOR RAW FLOAT MOV ---
-            recorder.setFormat("mov");
-            recorder.setVideoCodec(avcodec.AV_CODEC_ID_RAWVIDEO); // Uncompressed
-            recorder.setPixelFormat(avutil.AV_PIX_FMT_GRAYF32LE); // 32-bit Float
-            recorder.setFrameRate(fps);
-
-            recorder.setMetadata("comment", "Flashback Depth Pass | Near: " + nearPlane + " | Far: " + farPlane);
-
-            recorder.setMetadata("clip_start", String.valueOf(nearPlane));
-            recorder.setMetadata("clip_end", String.valueOf(farPlane));
-            // No GOP size needed for raw video
-
-            recorder.start();
-
-            // Queue setup (Reduced queue size to save RAM since frames are huge)
-            this.encodeQueue = new ArrayBlockingQueue<>(16);
-            this.reusePictureData = new ArrayBlockingQueue<>(16);
-
-            Thread encodeThread = createEncodeThread(recorder);
-            encodeThread.start();
-
-        } catch (Exception e) {
-            throw SneakyThrow.sneakyThrow(e);
+    public AsyncDepthVideoWriter(String filename, int width, int height) {
+        if (filename.contains(".")) {
+            filename = filename.substring(0, filename.lastIndexOf('.'));
         }
+
+        this.outputDir = new File(filename);
+        if (!outputDir.exists()) {
+            this.outputDir.mkdirs();
+        }
+
+        Flashback.LOGGER.info("Starting TIFF Sequence Export to: " + outputDir.getAbsolutePath());
+
+        this.encodeQueue = new ArrayBlockingQueue<>(16);
+        this.reusePictureData = new ArrayBlockingQueue<>(16);
+
+        Thread encodeThread = createEncodeThread();
+        encodeThread.start();
     }
 
-    private Thread createEncodeThread(FFmpegFrameRecorder recorder) {
+    private Thread createEncodeThread() {
         Thread encodeThread = new Thread(() -> {
+            ByteBuffer headerBuffer = MemoryUtil.memAlloc(1024); // Reusable header buffer
+
             while (true) {
                 DepthFrame src;
                 try {
@@ -82,8 +68,6 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
                 try {
                     if (src == null) {
                         if (this.finishEncodeThread.get()) {
-                            recorder.stop();
-                            recorder.close();
                             this.finishedWriting.set(true);
                             return;
                         } else {
@@ -91,18 +75,28 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
                         }
                     }
 
-                    ByteBuffer buffer = MemoryUtil.memByteBuffer(src.pointer, src.size);
+                    String fileName = String.format("frame_%04d.tif", src.frameIndex);
+                    File file = new File(this.outputDir, fileName);
 
-                    // RECORDING 32-BIT FLOAT
-                    recorder.recordImage(
-                            src.width,
-                            src.height,
-                            Frame.DEPTH_FLOAT,
-                            1,
-                            src.width * 4, // Stride = Width * 4 Bytes
-                            avutil.AV_PIX_FMT_GRAYF32LE,
-                            buffer
-                    );
+                    try (FileOutputStream fos = new FileOutputStream(file);
+                         FileChannel channel = fos.getChannel()) {
+
+                        // 1. Prepare Data Buffer (Raw Float Data)
+                        ByteBuffer dataBuffer = MemoryUtil.memByteBuffer(src.pointer, src.size);
+                        dataBuffer.order(ByteOrder.LITTLE_ENDIAN); // TIFF standard usually LE
+
+                        // 2. Build TIFF Header (Pure Java, no libraries)
+                        headerBuffer.clear();
+                        headerBuffer.order(ByteOrder.LITTLE_ENDIAN);
+
+                        writeTiffHeader(headerBuffer, src.width, src.height, src.size);
+
+                        headerBuffer.flip();
+
+                        // 3. Write Header then Data
+                        channel.write(headerBuffer);
+                        channel.write(dataBuffer);
+                    }
 
                     if (this.reusePictureData != null) {
                         if (this.reusePictureData.offer(src.pointer)) {
@@ -111,7 +105,6 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
                     }
 
                 } catch (Throwable t) {
-                    try { recorder.release(); } catch (Exception e) { e.printStackTrace(); }
                     this.threadedError.set(t);
                     this.finishEncodeThread.set(true);
                     this.finishedWriting.set(true);
@@ -121,9 +114,46 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
                 }
             }
         });
-        encodeThread.setName("Depth Encode Thread");
+        encodeThread.setName("Depth TIFF Write Thread");
         return encodeThread;
     }
+
+    // --- MANUAL TIFF HEADER WRITER ---
+    private void writeTiffHeader(ByteBuffer buf, int width, int height, int dataSize) {
+        // TIFF Header
+        buf.put((byte) 'I'); buf.put((byte) 'I'); // Byte Order: Little Endian
+        buf.putShort((short) 42);                 // TIFF Magic Number
+        buf.putInt(8);                            // Offset to first IFD (immediately after header)
+
+        // IFD (Image File Directory)
+        int numEntries = 9;
+        buf.putShort((short) numEntries);
+
+        // Tags must be sorted by ID!
+        writeTag(buf, 256, 4, 1, width);          // ImageWidth
+        writeTag(buf, 257, 4, 1, height);         // ImageHeight
+        writeTag(buf, 258, 3, 1, 32);             // BitsPerSample: 32
+        writeTag(buf, 259, 3, 1, 1);              // Compression: 1 (None)
+        writeTag(buf, 262, 3, 1, 1);              // PhotometricInterpretation: 1 (BlackIsZero)
+        writeTag(buf, 273, 4, 1, 8 + 2 + (numEntries * 12) + 4); // StripOffsets (Header + IFD Size)
+        writeTag(buf, 277, 3, 1, 1);              // SamplesPerPixel: 1 (Grayscale)
+        writeTag(buf, 278, 4, 1, height);         // RowsPerStrip (One big strip)
+        writeTag(buf, 279, 4, 1, dataSize);       // StripByteCounts (Size of image data)
+        // 339 is SampleFormat (3 = IEEE Float)
+        // Note: Java Short is signed, so 339 needs careful handling or just use putShort
+        buf.putShort((short) 339); buf.putShort((short) 3); buf.putInt(1); buf.putInt(3);
+
+        // Offset to next IFD (0 = none)
+        buf.putInt(0);
+    }
+
+    private void writeTag(ByteBuffer buf, int tag, int type, int count, int value) {
+        buf.putShort((short) tag);   // Tag ID
+        buf.putShort((short) type);  // Data Type (3=SHORT, 4=LONG)
+        buf.putInt(count);           // Count
+        buf.putInt(value);           // Value or Offset
+    }
+    // ---------------------------------
 
     public void encode(ByteBuffer src, int width, int height) {
         Throwable t = this.threadedError.get();
@@ -131,7 +161,6 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
 
         if (this.finishEncodeThread.get()) throw new IllegalStateException("Cannot encode after finish()");
 
-        // 4 BYTES PER PIXEL
         int sizeBytes = width * height * 4;
 
         Long ptr = this.reusePictureData.poll();
@@ -139,13 +168,16 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
             ptr = MemoryUtil.nmemAlloc(sizeBytes);
         }
 
+        // --- CRITICAL FIX ---
+        src.clear();
         MemoryUtil.memByteBuffer(ptr, sizeBytes).put(src);
-
         src.rewind();
+        // --------------------
 
         while (true) {
             try {
-                this.encodeQueue.put(new DepthFrame(ptr, sizeBytes, width, height));
+                this.frameCounter++;
+                this.encodeQueue.put(new DepthFrame(ptr, sizeBytes, width, height, this.frameCounter));
                 break;
             } catch (InterruptedException ignored) {}
         }

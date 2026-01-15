@@ -9,6 +9,7 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHEXPORT;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.change.KeyframeChangeFov;
@@ -261,82 +262,92 @@ public class ExportJob {
 
     public static void captureDepthFrame() {
         if (!Flashback.getConfig().depthexport) return;
+        if (exportrenderTarget == null) return;
 
         int depthTexId = exportrenderTarget.getDepthTextureId();
-        if (depthTexId > -1) {
+        if (depthTexId <= -1) return;
 
-            RenderSystem.bindTexture(depthTexId);
+        RenderSystem.bindTexture(depthTexId);
 
-            int actualFormat = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
+        int texW = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+        int texH = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
 
+        if (texW <= 0 || texH <= 0) {
+            texW = exportrenderTarget.width;
+            texH = exportrenderTarget.height;
+            if (texW <= 0 || texH <= 0) return;
+        }
 
+        int oldPackAlignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
+        int oldPackRowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
 
-            int oldPackAlignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
-            int oldPackRowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
+        int neededSize = texW * texH;
+        if (rawDepthBuffer == null || rawDepthBuffer.capacity() < neededSize) {
+            rawDepthBuffer = BufferUtils.createFloatBuffer(neededSize);
+            linearDepthBuffer = ByteBuffer.allocateDirect(neededSize * 4);
+            linearDepthBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        }
+        rawDepthBuffer.clear();
+        linearDepthBuffer.clear();
 
-            int texW = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
-            int texH = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
+        GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, rawDepthBuffer);
 
+        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, oldPackAlignment);
+        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, oldPackRowLength);
 
+        boolean highPrecision = (Flashback.depthprecision == DEPTHEXPORT.HIGHPRECISION);
+        float mathNearPlane = 0.05f;
+        float mathFarPlane = 64.0f;
 
+        // SCALE FACTOR:
+        // 1.0f    = Meters (1.5 = 1.5m)
+        // 100.0f  = Centimeters (150.0 = 1.5m)
+        // 1000.0f = Millimeters (1500.0 = 1.5m)
+        float scaleFactor = 1000.0f;
 
-            if (texW <= 0) texW = exportrenderTarget.width;
-            if (texH <= 0) texH = exportrenderTarget.height;
+        float skyValue = 100000.0f;
 
-            int neededSize = texW * texH;
+        for (int i = 0; i < texW * texH; i++) {
+            float z_b = rawDepthBuffer.get(i);
 
-            // Allocate 4 bytes per pixel (Float) instead of 2 (Short) ---
-            if (rawDepthBuffer == null || rawDepthBuffer.capacity() < neededSize) {
-                rawDepthBuffer = BufferUtils.createFloatBuffer(neededSize);
-                // 4 bytes per float
-                linearDepthBuffer = ByteBuffer.allocateDirect(neededSize * 4);
-                linearDepthBuffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            int x = i % texW;
+            int y = i / texW;
+            int flippedIndex = ((texH - 1 - y) * texW + x) * 4;
+
+            // 1. Handle Sky / Invalid Data (Raw buffer 1.0 is usually far plane)
+            if (z_b >= 0.99999f) {
+                linearDepthBuffer.putFloat(flippedIndex, skyValue);
+                continue;
             }
 
-            rawDepthBuffer.clear();
-            linearDepthBuffer.clear();
+            // 2. Linearization (Get Meters)
+            float z_ndc = 2.0f * z_b - 1.0f;
+            float z_linearMeters = (2.0f * mathNearPlane * mathFarPlane) /
+                    (mathFarPlane + mathNearPlane - z_ndc * (mathFarPlane - mathNearPlane));
 
-            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
-            GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
-            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, rawDepthBuffer);
+            // 3. Apply Scale (Meters -> Millimeters)
+            float z_scaled = z_linearMeters * scaleFactor;
 
-            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, oldPackAlignment);
-            GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, oldPackRowLength);
+            // 4. Safety Checks
+            if (Float.isNaN(z_scaled) || Float.isInfinite(z_scaled) || z_scaled < 0) {
+                linearDepthBuffer.putFloat(flippedIndex, skyValue);
+            } else {
 
+                // z_scaled = Math.min(z_scaled, mathFarPlane * scaleFactor);
 
-            float mathNearPlane = 0.05f;
-            float mathFarPlane = farPlane;
-
-            for (int i = 0; i < texW * texH; i++) {
-                float z_b = rawDepthBuffer.get(i);
-
-                // Calculate index
-                int x = i % texW;
-                int y = i / texW;
-
-                // -Jump by 4 bytes instead of 2 ---
-                int flippedIndex = ((texH - 1 - y) * texW + x) * 4;
-
-                if (z_b >= 1f) {
-
-                    linearDepthBuffer.putFloat(flippedIndex, 10000.0f);
-                    continue;
-                }
-
-                // Linearize
-                float z_ndc = 2.0f * z_b - 1.0f;
-                float z_linear = (2.0f * mathNearPlane * mathFarPlane) / (mathFarPlane + mathNearPlane - z_ndc * (mathFarPlane - mathNearPlane));
-
-                // Write Real Scale directly
-                linearDepthBuffer.putFloat(flippedIndex, z_linear);
+                linearDepthBuffer.putFloat(flippedIndex, z_scaled);
             }
+        }
 
-            linearDepthBuffer.position(0);
-            // Limit is now * 4
-            linearDepthBuffer.limit(texW * texH * 4);
+        linearDepthBuffer.position(0);
+        linearDepthBuffer.limit(texW * texH * 4);
 
-            // 7. ENCODE
+        if (depthWriter != null) {
+            // Ensure depthWriter knows these values are now in Millimeters (0 - 64000)
 
+            org.lwjgl.opengl.GL11.glFinish();
             depthWriter.encode(linearDepthBuffer, texW, texH);
         }
     }
@@ -390,8 +401,7 @@ public class ExportJob {
             depthWriter = new AsyncDepthVideoWriter(
                     folder.toString().replace(".mp4", "_depth.mkv"),
                     width,
-                    height,
-                    this.settings.framerate(),nearPlane,farPlane
+                    height
             );
         }
         ReplayServer replayServer = Flashback.getReplayServer();

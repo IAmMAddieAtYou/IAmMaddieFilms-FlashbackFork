@@ -10,6 +10,7 @@ import com.moulberry.flashback.combo_options.VideoContainer;
 import com.moulberry.flashback.configuration.FlashbackConfig;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.exporting.ExportJobQueue;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHEXPORT;
 import com.moulberry.flashback.exporting.depthsettings.DEPTHVISUALS;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
@@ -180,15 +181,27 @@ public class StartExportWindow {
 
             DEPTHVISUALS[] depthSettings = { DEPTHVISUALS.LEVELS, DEPTHVISUALS.ENTITIES, DEPTHVISUALS.PARTICLES };
 
+            DEPTHEXPORT[] depthprecision = { DEPTHEXPORT.HIGHPRECISION, DEPTHEXPORT.NORMALPRECISION};
 
             if (config.depthexport) {
+
+                ImGui.textWrapped("PSA: Depth is exported as a image sequence!!");
 
                 DEPTHVISUALS newDepthInfo = ImGuiHelper.enumCombo("Depth Settings", config.depthinfo, depthSettings);
 
                 if (newDepthInfo != config.depthinfo) {
                     config.depthinfo = newDepthInfo;
                 }
+
+                DEPTHEXPORT newDepthexport = ImGuiHelper.enumCombo("Depth Precision", config.depthexports, depthprecision);
+
+                if (newDepthexport != config.depthexports) {
+                    config.depthexports = newDepthexport;
+                    ImGui.textWrapped("Please restart minecraft for these changes to be applied");
+                }
             }
+
+
 
             ImGuiHelper.tooltip("Creates a Simple Json File with all the camera information for each frame of the exported video.");
 

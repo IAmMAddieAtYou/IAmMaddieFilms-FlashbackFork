@@ -10,8 +10,10 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.WindowSizeTracker;
 import com.moulberry.flashback.editor.ui.ReplayUI;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHEXPORT;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import org.lwjgl.glfw.GLFW;
@@ -41,11 +43,12 @@ public abstract class MixinRenderTarget {
             ),
             remap = true
     )
-    private void forceFloatDepthBuffer(int target, int level, int internalFormat, int width, int height, int border, int format, int type, IntBuffer pixels) {
+    private void dynamicDepthAllocation(int target, int level, int internalFormat, int width, int height, int border, int format, int type, IntBuffer pixels) {
 
-        // Debug to catch the Recorder
-        if (format == GL30.GL_DEPTH_COMPONENT) {
-            System.out.println("Flashback Mixin (RenderTarget): Upgrading Depth to 32-bit Float!");
+        boolean useHighPrecision = (Flashback.depthprecision == DEPTHEXPORT.HIGHPRECISION);
+
+        if (useHighPrecision && format == GL30.GL_DEPTH_COMPONENT) {
+            // Force 32-bit Float
             GlStateManager._texImage2D(target, level, GL30.GL_DEPTH_COMPONENT32F, width, height, border, format, GL11.GL_FLOAT, pixels);
         } else {
             GlStateManager._texImage2D(target, level, internalFormat, width, height, border, format, type, pixels);

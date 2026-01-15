@@ -8,6 +8,7 @@ import com.moulberry.flashback.combo_options.AudioCodec;
 import com.moulberry.flashback.combo_options.VideoCodec;
 import com.moulberry.flashback.combo_options.VideoContainer;
 import com.moulberry.flashback.editor.ui.windows.StringValueSet;
+import com.moulberry.flashback.exporting.depthsettings.DEPTHEXPORT;
 import com.moulberry.flashback.exporting.depthsettings.DEPTHVISUALS;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.screen.select_replay.ReplaySorting;
@@ -49,6 +50,8 @@ public class FlashbackConfig {
     public boolean quicksave = false;
 
     public DEPTHVISUALS depthinfo = DEPTHVISUALS.LEVELS;
+
+    public DEPTHEXPORT depthexports = DEPTHEXPORT.HIGHPRECISION;
 
     public boolean cjson = false;
 
