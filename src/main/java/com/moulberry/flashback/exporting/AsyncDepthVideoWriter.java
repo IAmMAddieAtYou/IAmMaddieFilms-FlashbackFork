@@ -85,7 +85,7 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
                         ByteBuffer dataBuffer = MemoryUtil.memByteBuffer(src.pointer, src.size);
                         dataBuffer.order(ByteOrder.LITTLE_ENDIAN); // TIFF standard usually LE
 
-                        // 2. Build TIFF Header (Pure Java, no libraries)
+                        // 2. Build TIFF Header
                         headerBuffer.clear();
                         headerBuffer.order(ByteOrder.LITTLE_ENDIAN);
 
@@ -118,7 +118,7 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
         return encodeThread;
     }
 
-    // --- MANUAL TIFF HEADER WRITER ---
+
     private void writeTiffHeader(ByteBuffer buf, int width, int height, int dataSize) {
         // TIFF Header
         buf.put((byte) 'I'); buf.put((byte) 'I'); // Byte Order: Little Endian
@@ -140,7 +140,7 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
         writeTag(buf, 278, 4, 1, height);         // RowsPerStrip (One big strip)
         writeTag(buf, 279, 4, 1, dataSize);       // StripByteCounts (Size of image data)
         // 339 is SampleFormat (3 = IEEE Float)
-        // Note: Java Short is signed, so 339 needs careful handling or just use putShort
+        // Java Short is signed, so 339 needs  handling or we can just use putShort
         buf.putShort((short) 339); buf.putShort((short) 3); buf.putInt(1); buf.putInt(3);
 
         // Offset to next IFD (0 = none)
@@ -168,11 +168,9 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
             ptr = MemoryUtil.nmemAlloc(sizeBytes);
         }
 
-        // --- CRITICAL FIX ---
         src.clear();
         MemoryUtil.memByteBuffer(ptr, sizeBytes).put(src);
         src.rewind();
-        // --------------------
 
         while (true) {
             try {
