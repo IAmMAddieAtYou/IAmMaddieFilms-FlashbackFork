@@ -51,6 +51,7 @@ public class EditorState {
     public Set<UUID> hideNametags = new HashSet<>();
     public Map<UUID, GameProfile> skinOverride = new HashMap<>();
     public Map<UUID, FilePlayerSkin> skinOverrideFromFile = new HashMap<>();
+    public Map<UUID, FilePlayerSkin> depthSkinOverrideFromFile = new HashMap<>();
     public Map<UUID, String> nameOverride = new HashMap<>();
     public Map<UUID, GlowingOverride> glowingOverride = new HashMap<>();
     public Set<UUID> hideTeamPrefix = new HashSet<>();

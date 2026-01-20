@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.moulberry.flashback.Flashback;
+import com.moulberry.flashback.exporting.PerfectFrames;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.editor.ui.ReplayUI;
@@ -116,20 +117,16 @@ public abstract class MixinGameRenderer {
             ci.cancel();
         }
     }
-    
+
     @Inject(method = "getProjectionMatrix", at = @At("RETURN"))
-    private void captureTrueProjection(double fov, CallbackInfoReturnable<Matrix4f> cir) {
-        Matrix4f projection = cir.getReturnValue();
-
-        // Perform your math here immediately
-        if (projection != null) {
-            float m11 = projection.m11(); // Verify your mappings for m11
-            float fovRadians = (float) (2 * Math.atan(1.0f / m11));
-            float fovDegrees = (float) Math.toDegrees(fovRadians);
-
-            //Flashback.savefov = fovDegrees;
+    private void onGetProjectionMatrix(double fov, CallbackInfoReturnable<Matrix4f> cir) {
+        // Capture the matrix!
+        // We clone it to ensure we don't hold a reference that gets mutated later.
+        if (cir.getReturnValue() != null) {
+            PerfectFrames.worldMatrix = new Matrix4f(cir.getReturnValue());
         }
     }
+
     @Inject(method = "getFov", at = @At("HEAD"), cancellable = true)
     public void getFov(Camera camera, float f, boolean bl, CallbackInfoReturnable<Double> cir) {
         if (Flashback.isInReplay()) {

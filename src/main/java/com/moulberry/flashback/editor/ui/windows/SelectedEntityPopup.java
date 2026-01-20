@@ -31,6 +31,7 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Team;
 import org.lwjgl.glfw.GLFW;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -258,6 +259,7 @@ public class SelectedEntityPopup {
                             ProfileResult profile = Minecraft.getInstance().getMinecraftSessionService().fetchProfile(changeSkinUuid, true);
                             editorState.skinOverride.put(entity.getUUID(), profile.profile());
                             editorState.skinOverrideFromFile.remove(entity.getUUID());
+                            editorState.depthSkinOverrideFromFile.remove(entity.getUUID());
                         }
                     } catch (Exception ignored) {}
                 }
@@ -270,14 +272,21 @@ public class SelectedEntityPopup {
                         if (pathStr != null) {
                             editorState.skinOverride.remove(entity.getUUID());
                             editorState.skinOverrideFromFile.put(entity.getUUID(), new FilePlayerSkin(pathStr));
+
+                            File original = new File(pathStr);
+                            String folder = original.getParent();
+                            String newName = "depth" + original.getName();
+                            String depthPath = new File(folder, newName).getAbsolutePath();
+                            editorState.depthSkinOverrideFromFile.put(entity.getUUID(), new FilePlayerSkin(depthPath));
                         }
                     });
                 }
 
-                if (editorState.skinOverride.containsKey(entity.getUUID()) || editorState.skinOverrideFromFile.containsKey(entity.getUUID())) {
+                if (editorState.skinOverride.containsKey(entity.getUUID()) || editorState.skinOverrideFromFile.containsKey(entity.getUUID()) || editorState.depthSkinOverrideFromFile.containsKey(entity.getUUID())) {
                     if (ImGui.button("Reset Skin")) {
                         editorState.skinOverride.remove(entity.getUUID());
                         editorState.skinOverrideFromFile.remove(entity.getUUID());
+                        editorState.depthSkinOverrideFromFile.remove(entity.getUUID());
                         changeSkinInput.set("");
                     }
                 }

@@ -10,6 +10,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 
+import java.io.File;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -47,6 +48,7 @@ public record MinecraftKeyframeHandler(Minecraft minecraft) implements KeyframeH
         // Reset any existing skin override for this entity first
         editorState.skinOverride.remove(entityid);
         editorState.skinOverrideFromFile.remove(entityid);
+            editorState.depthSkinOverrideFromFile.remove(entityid);
 
 
         if (isUuidSkin) {
@@ -65,6 +67,11 @@ public record MinecraftKeyframeHandler(Minecraft minecraft) implements KeyframeH
         } else {
 
             editorState.skinOverrideFromFile.put(entityid, new FilePlayerSkin(skinIdentifier));
+            File original = new File(skinIdentifier);
+            String folder = original.getParent();
+            String newName = "depth" + original.getName();
+            String depthPath = new File(folder, newName).getAbsolutePath();
+            editorState.depthSkinOverrideFromFile.put(entityid, new FilePlayerSkin(depthPath));
         }}
     }
 

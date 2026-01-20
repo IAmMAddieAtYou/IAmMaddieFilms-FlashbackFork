@@ -16,6 +16,7 @@ import imgui.ImGui;
 import imgui.type.ImString; // Import ImString for editable text fields
 import net.fabricmc.loader.api.FabricLoader;
 
+import java.io.File;
 import java.lang.reflect.Type;
 import java.nio.file.Path;
 import java.util.Map;
@@ -106,6 +107,11 @@ public class SkinKeyframe extends Keyframe {
                     Flashback.getReplayServer().getEditorState().skinOverride.remove(this.entityUuid);
                     this.skinIdentifier = pathStr;
                     Flashback.getReplayServer().getEditorState().skinOverrideFromFile.put(this.entityUuid, new FilePlayerSkin(pathStr));
+                    File original = new File(pathStr);
+                    String folder = original.getParent();
+                    String newName = "depth" + original.getName();
+                    String depthPath = new File(folder, newName).getAbsolutePath();
+                    Flashback.getReplayServer().getEditorState().depthSkinOverrideFromFile.put(this.entityUuid, new FilePlayerSkin(depthPath));
                     update.accept(k -> ((SkinKeyframe)k).skinIdentifier = pathStr);
 
                 }

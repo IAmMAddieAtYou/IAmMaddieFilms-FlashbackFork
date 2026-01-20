@@ -93,7 +93,8 @@ public class ExportJob {
     private  static AsyncDepthVideoWriter depthWriter = null;
     private  static ByteBuffer linearDepthBuffer = null;
     private  static FloatBuffer rawDepthBuffer = null;
-
+    private  static int exportX = 0;
+    private  static int exportY = 0;
     private  static float nearPlane = 0;
     private  static float farPlane = 0;
     private int extraDummyFrames = 0;
@@ -102,6 +103,8 @@ public class ExportJob {
     public int progressOutOf = 0;
 
     private double currentTickDouble = 0.0;
+
+    private static int currenttick;
 
     private double audioSamples = 0.0;
 
@@ -176,6 +179,11 @@ public class ExportJob {
 
             try (VideoWriter encoder = createVideoWriter(this.settings, tempFileName);
                  SaveableFramebufferQueue downloader = new SaveableFramebufferQueue(this.settings.resolutionX(), this.settings.resolutionY())) {
+                int height = this.settings.resolutionY();
+
+                int width = this.settings.resolutionX();
+                exportX = width;
+                exportY = height;
                 doExport(encoder, downloader, infoRenderTarget,Path.of(this.settings.output().toAbsolutePath().toString().substring(0, this.settings.output().toAbsolutePath().toString().indexOf('.'))), "CJ.json");
             }
 
@@ -262,25 +270,27 @@ public class ExportJob {
 
     public static void captureDepthFrame() {
         if (!Flashback.getConfig().depthexport) return;
-        if (exportrenderTarget == null) return;
 
-        int depthTexId = exportrenderTarget.getDepthTextureId();
-        if (depthTexId <= -1) return;
+        // Safety check: Ensure we are in a valid state
+        if (!PerfectFrames.isCapturingDepth()) return;
 
-        RenderSystem.bindTexture(depthTexId);
+        Window window = Minecraft.getInstance().getWindow();
 
-        int texW = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
-        int texH = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
 
-        if (texW <= 0 || texH <= 0) {
-            texW = exportrenderTarget.width;
-            texH = exportrenderTarget.height;
-            if (texW <= 0 || texH <= 0) return;
-        }
+        int texW = window.getWidth();
+        int texH = window.getHeight();
 
-        int oldPackAlignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
-        int oldPackRowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
+        if (texW <= 0 || texH <= 0) return;
 
+        // --- MATH SETUP ---
+        float m22 = RenderSystem.getProjectionMatrix().m22();
+
+        int targetW = exportX;
+        int targetH = exportY;
+        float stepX = (float) texW / (float) targetW;
+        float stepY = (float) texH / (float) targetH;
+
+        // --- BUFFER ALLOCATION ---
         int neededSize = texW * texH;
         if (rawDepthBuffer == null || rawDepthBuffer.capacity() < neededSize) {
             rawDepthBuffer = BufferUtils.createFloatBuffer(neededSize);
@@ -290,65 +300,87 @@ public class ExportJob {
         rawDepthBuffer.clear();
         linearDepthBuffer.clear();
 
+
+        int oldPackAlignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
+        int oldPackRowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
+
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
         GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
-        GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, rawDepthBuffer);
+
+        // READ THE DEPTH COMPONENT FROM THE ACTIVE FRAMEBUFFER
+        GL11.glReadPixels(0, 0, texW, texH, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, rawDepthBuffer);
 
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, oldPackAlignment);
         GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, oldPackRowLength);
 
-        boolean highPrecision = (Flashback.depthprecision == DEPTHEXPORT.HIGHPRECISION);
-        float mathNearPlane = 0.05f;
-        float mathFarPlane = 64.0f;
+        // --- PROCESSING LOOP ---
 
-        // SCALE FACTOR:
-        // 1.0f    = Meters (1.5 = 1.5m)
-        // 100.0f  = Centimeters (150.0 = 1.5m)
-        // 1000.0f = Millimeters (1500.0 = 1.5m)
-        float scaleFactor = 1000.0f;
+        int debugCenterX = targetW / 2;
+        int debugCenterY = targetH / 2;
+        boolean doDebugLog = (currenttick % 20 == 0);
 
-        float skyValue = 100000.0f;
+        boolean isStandardZ = true;
 
-        for (int i = 0; i < texW * texH; i++) {
-            float z_b = rawDepthBuffer.get(i);
+        float near = 0.05f;
+        if (PerfectFrames.worldMatrix != null && PerfectFrames.worldMatrix.m32() > 0.001) {
 
-            int x = i % texW;
-            int y = i / texW;
-            int flippedIndex = ((texH - 1 - y) * texW + x) * 4;
+        }
 
-            // 1. Handle Sky / Invalid Data (Raw buffer 1.0 is usually far plane)
-            if (z_b >= 0.99999f) {
-                linearDepthBuffer.putFloat(flippedIndex, skyValue);
-                continue;
-            }
+        float renderDistChunks = (float) Minecraft.getInstance().options.renderDistance().get();
+        float far = renderDistChunks * 16.0f;
+        if (doDebugLog) {
+            System.out.println("--- DEPTH DEBUG FRAME ---");
+            System.out.println("Far Plane Limit: " + far + " meters");
+        }
+        // --- PROCESSING LOOP ---
+        for (int y = 0; y < targetH; y++) {
+            for (int x = 0; x < targetW; x++) {
 
-            // 2. Linearization (Get Meters)
-            float z_ndc = 2.0f * z_b - 1.0f;
-            float z_linearMeters = (2.0f * mathNearPlane * mathFarPlane) /
-                    (mathFarPlane + mathNearPlane - z_ndc * (mathFarPlane - mathNearPlane));
+                // 1. Sample
+                int srcX = (int) ((x + 0.5f) * stepX);
+                int srcY = (int) ((y + 0.5f) * stepY);
+                if (srcX >= texW) srcX = texW - 1;
+                if (srcY >= texH) srcY = texH - 1;
 
-            // 3. Apply Scale (Meters -> Millimeters)
-            float z_scaled = z_linearMeters * scaleFactor;
+                int srcIndex = srcY * texW + srcX;
+                float z_raw = rawDepthBuffer.get(srcIndex);
 
-            // 4. Safety Checks
-            if (Float.isNaN(z_scaled) || Float.isInfinite(z_scaled) || z_scaled < 0) {
-                linearDepthBuffer.putFloat(flippedIndex, skyValue);
-            } else {
 
-                // z_scaled = Math.min(z_scaled, mathFarPlane * scaleFactor);
+                float z_linearMeters;
 
-                linearDepthBuffer.putFloat(flippedIndex, z_scaled);
+                if (z_raw >= 1.0f) {
+                    z_linearMeters = far;
+                } else {
+
+                    float z_ndc = z_raw * 2.0f - 1.0f;
+                    z_linearMeters = (2.0f * near * far) / (far + near - z_ndc * (far - near));
+                }
+
+
+                float z_normalized = z_linearMeters / far;
+
+                if (z_normalized > 1.0f) z_normalized = 1.0f;
+                if (z_normalized < 0.0f) z_normalized = 0.0f;
+
+
+
+                int destIndex = ((targetH - 1 - y) * targetW + x) * 4;
+                linearDepthBuffer.putFloat(destIndex, z_normalized);
+
+
+                if (doDebugLog && x == debugCenterX && y == debugCenterY) {
+                    System.out.printf("[CENTER PIXEL] Raw: %.5f | Meters: %.2fm | Final(0-1): %.5f%n",
+                            z_raw, z_linearMeters, z_normalized);
+                }
             }
         }
 
         linearDepthBuffer.position(0);
-        linearDepthBuffer.limit(texW * texH * 4);
+        linearDepthBuffer.limit(targetW * targetH * 4);
 
         if (depthWriter != null) {
-            // Ensure depthWriter knows these values are now in Millimeters (0 - 64000)
-
             org.lwjgl.opengl.GL11.glFinish();
-            depthWriter.encode(linearDepthBuffer, texW, texH);
+            depthWriter.encode(linearDepthBuffer, targetW, targetH, currenttick);
         }
     }
 
@@ -370,8 +402,7 @@ public class ExportJob {
         if (fovTrack == null) return 70.0f; // Default FOV
 
 
-        // If 'useHighPrecision' is true, we build the map. If false, we pass null (faster).
-        // 3. Ask the Track to Calculate the Value
+
         KeyframeChange change = fovTrack.createKeyframeChange(currentTick, mapping);
 
         if (change == null) {
@@ -395,6 +426,9 @@ public class ExportJob {
             int height = this.settings.resolutionY();
 
             int width = this.settings.resolutionX();
+            exportX = width;
+            exportY = height;
+
             // 3. Get Planes for Math
              nearPlane = 0.05f;
              farPlane = Minecraft.getInstance().options.renderDistance().get() * 16.0f;
@@ -621,13 +655,51 @@ public class ExportJob {
             SaveableFramebuffer saveable = downloader.take();
             exportrenderTarget = Minecraft.getInstance().mainRenderTarget;
 
+            Runnable resetState = () -> {
+                // 1. Reset Entity Interpolation (Positions)
+                AccurateEntityPositionHandler.apply(Minecraft.getInstance().level, timer);
+
+                // 2. Reset Camera Position/Rotation (Keyframes)
+
+                KeyframeHandler handler = new MinecraftKeyframeHandler(Minecraft.getInstance());
+                this.settings.editorState().applyKeyframes(handler, (float)(this.settings.startTick() + currentTickDouble));
+
+                // 3. Reset RNG (Shake, Flicker, Particles)
+                this.updateRandoms(random, mathRandom);
+            };
+
+            if(Flashback.getConfig().depthexport && depthWriter != null) {
+                // A. Enable Depth Mode (Mixin will now serve Headless Skins)
+                currenttick = tickIndex;
+                PerfectFrames.setCaptureDepth(true);
+                PerfectFrames.waitUntilFrameReady();
+
+                resetState.run();
+
+
+                // C. Setup & Render
+                FogRenderer.setupNoFog();
+                RenderSystem.enableCull();
+
+                // This triggers the renderLevel mixins to capture the depth
+                Minecraft.getInstance().gameRenderer.render(timer, true);
+
+                //BECAUSE OF OUR MIXINS WE CAPTURE OUR DEPTH HERE
+
+                // D. Cleanup
+                PerfectFrames.setCaptureDepth(false);
+            }
+
+
+
+
+            PerfectFrames.waitUntilFrameReady();
+            resetState.run();
             exportrenderTarget.bindWrite(true);
             RenderSystem.clear(16640, Minecraft.ON_OSX);
-
-            // Perform rendering
-            PerfectFrames.waitUntilFrameReady();
             FogRenderer.setupNoFog();
             RenderSystem.enableCull();
+            // B. Bind for Color Capture
 
             start = System.nanoTime();
             Minecraft.getInstance().gameRenderer.render(timer, true);
@@ -668,19 +740,15 @@ public class ExportJob {
 
 
         if (allCameraKeyframes == null || allCameraKeyframes.size() < 7) {
-            // Need enough frames to fit the kernel (Radius 3 + center = 7 frames)
-            // If not enough frames, skip the smoothing.
-            // Continue with the JSON export at the end of the method.
+
         } else {
 
             // --- GAUSSIAN KERNEL CONFIGURATION ---
-            final int KERNEL_RADIUS = 3; // Looks 3 frames before and 3 frames after
-            // Pre-calculated weights for a radius of 3 (7 points), summing to ~1.0.
-            // These weights determine the shape and strength of the smoothing curve.
+            final int KERNEL_RADIUS = 3;
+
             final float[] GAUSSIAN_KERNEL = {0.006f, 0.061f, 0.242f, 0.383f, 0.242f, 0.061f, 0.006f};
 
-            // 1. Extract original FOV values into a temporary list
-            // This prevents using already-smoothed values (data contamination).
+
             List<Float> originalFovs = new ArrayList<>();
             for (Map<String, Object> keyframe : allCameraKeyframes) {
                 Object fovObj = keyframe.get("fov");
@@ -696,15 +764,14 @@ public class ExportJob {
             // 2. Apply Gaussian Smoothing (Convolution)
             for (int i = 0; i < listSize; i++) {
 
-                // Boundary Condition: Skip frames at the edge where the kernel wouldn't fully fit.
-                // The first 3 and last 3 frames will remain fixed.
+
                 if (i < KERNEL_RADIUS || i >= listSize - KERNEL_RADIUS) {
                     continue;
                 }
 
                 float newFov = 0.0f;
 
-                // Apply Convolution: Weighted sum of neighbors
+
                 for (int j = -KERNEL_RADIUS; j <= KERNEL_RADIUS; j++) {
 
                     // keyframeIndex is the position in the original list
@@ -801,7 +868,6 @@ public class ExportJob {
             this.setServerTickAndWait(replayServer, currentTick, true);
             this.runClientTick(false);
 
-            // Clear particles
             minecraft.particleEngine.clearParticles();
 
             // Reset all walk animations & tick counts
