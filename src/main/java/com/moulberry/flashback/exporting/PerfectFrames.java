@@ -6,6 +6,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.SkinManager;
+import org.joml.Matrix4f;
 
 import java.util.*;
 import java.util.concurrent.locks.LockSupport;
@@ -15,8 +16,18 @@ public class PerfectFrames {
 
     private static boolean isEnabled = false;
     static List<Consumer<Boolean>> frexFlawlessFrames = new ArrayList<>();
-
+    public static Matrix4f worldMatrix = new Matrix4f();
     private static final Set<UUID> ignoreSkinLoading = new HashSet<>();
+
+    private static volatile boolean captureDepth = false;
+
+    public static void setCaptureDepth(boolean state) {
+        captureDepth = state;
+    }
+
+    public static boolean isCapturingDepth() {
+        return captureDepth;
+    }
 
     public static void enable() {
         isEnabled = true;

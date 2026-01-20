@@ -26,7 +26,6 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
     private final AtomicReference<Throwable> threadedError = new AtomicReference<>(null);
 
     private final File outputDir;
-    private int frameCounter = 0;
 
     private record DepthFrame(long pointer, int size, int width, int height, int frameIndex) implements AutoCloseable {
         public void close() {
@@ -155,7 +154,7 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
     }
     // ---------------------------------
 
-    public void encode(ByteBuffer src, int width, int height) {
+    public void encode(ByteBuffer src, int width, int height, int explicitFrameIndex) {
         Throwable t = this.threadedError.get();
         if (t != null) SneakyThrow.sneakyThrow(t);
 
@@ -168,14 +167,16 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
             ptr = MemoryUtil.nmemAlloc(sizeBytes);
         }
 
-        src.clear();
+
+
         MemoryUtil.memByteBuffer(ptr, sizeBytes).put(src);
+
         src.rewind();
+
 
         while (true) {
             try {
-                this.frameCounter++;
-                this.encodeQueue.put(new DepthFrame(ptr, sizeBytes, width, height, this.frameCounter));
+                this.encodeQueue.put(new DepthFrame(ptr, sizeBytes, width, height, explicitFrameIndex));
                 break;
             } catch (InterruptedException ignored) {}
         }

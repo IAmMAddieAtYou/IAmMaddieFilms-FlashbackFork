@@ -5,6 +5,7 @@ import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.yggdrasil.ProfileResult;
 import com.moulberry.flashback.FilePlayerSkin;
 import com.moulberry.flashback.Flashback;
+import com.moulberry.flashback.exporting.PerfectFrames;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import net.minecraft.client.Minecraft;
@@ -63,11 +64,20 @@ public abstract class MixinAbstractClientPlayer extends Player {
     public void getSkin(CallbackInfoReturnable<PlayerSkin> cir) {
         EditorState editorState = EditorStateManager.getCurrent();
         if (editorState != null) {
-            FilePlayerSkin filePlayerSkin = editorState.skinOverrideFromFile.get(this.getUUID());
-            if (filePlayerSkin != null) {
-                cir.setReturnValue(filePlayerSkin.getSkin());
-                return;
+            if (PerfectFrames.isCapturingDepth()) {
+                FilePlayerSkin depthSkin = editorState.depthSkinOverrideFromFile.get(this.getUUID());
+                if (depthSkin != null) {
+                    // Return the headless skin
+                    cir.setReturnValue(depthSkin.getSkin());
+                    return;
+                }
             }
+                FilePlayerSkin filePlayerSkin = editorState.skinOverrideFromFile.get(this.getUUID());
+                if (filePlayerSkin != null) {
+                    cir.setReturnValue(filePlayerSkin.getSkin());
+                    return;
+                }
+
 
             GameProfile skinOverride = editorState.skinOverride.get(this.uuid);
             if (skinOverride != null) {
