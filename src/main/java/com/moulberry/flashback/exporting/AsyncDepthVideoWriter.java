@@ -167,14 +167,11 @@ public class AsyncDepthVideoWriter implements AutoCloseable {
             ptr = MemoryUtil.nmemAlloc(sizeBytes);
         }
 
-        // --- FIX STARTS HERE ---
-        // DELETE THIS LINE: src.clear();
-        // We trust that 'src' is already positioned at 0 and limited correctly by the caller.
+        
 
         MemoryUtil.memByteBuffer(ptr, sizeBytes).put(src);
 
         src.rewind(); // Optional: Reset position if you plan to read it again (good practice)
-        // --- FIX ENDS HERE ---
 
         while (true) {
             try {
