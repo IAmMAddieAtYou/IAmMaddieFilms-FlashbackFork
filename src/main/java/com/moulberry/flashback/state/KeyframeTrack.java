@@ -53,23 +53,13 @@ public class KeyframeTrack {
 
         Keyframe lowerKeyframe = lowerEntry.getValue();
 
-        if (tick == lowerEntry.getKey()) {
-            return lowerKeyframe.createChange();
-        }
+//        if (tick == lowerEntry.getKey()) {
+//            return lowerKeyframe.createChange();
+//        }
 
         SidedInterpolationType leftInterpolation = lowerEntry.getValue().interpolationType().rightSide;
 
-        // SKIP strict keyframe snapping for approximate types (NURBS, SMOOTHING).
-        // These curves do not necessarily pass through the control points.
-        // Snapping to the keyframe at the exact tick causes a visual "jump".
-        boolean isApproximate = leftInterpolation == SidedInterpolationType.NURBS ||
-                leftInterpolation == SidedInterpolationType.SMOOTHING;
-
-        if (tick == lowerEntry.getKey() && !isApproximate) {
-            return lowerKeyframe.createChange();
-        }
-
-        // Immediately apply hold
+        // Immediately apply hold (Step function, so snapping to keyframe is correct/intended here)
         if (leftInterpolation == SidedInterpolationType.HOLD) {
             return lowerKeyframe.createChange();
         }
@@ -77,6 +67,8 @@ public class KeyframeTrack {
         // Get next entry, skip if tick is not between two keyframes
         Map.Entry<Integer, Keyframe> ceilEntry = keyframeTimes.ceilingEntry(lowerEntry.getKey() + 1);
         if (ceilEntry == null) {
+            // If we are at the very last keyframe, we have no forward segment.
+            // In this specific case, we must return the keyframe value because we can't interpolate forward.
             if ((int) tick == lowerEntry.getKey()) {
                 return lowerKeyframe.createChange();
             }
@@ -88,90 +80,109 @@ public class KeyframeTrack {
             rightInterpolation = leftInterpolation;
         }
 
-        float realTimeTick = realTimeMapping == null ? tick : realTimeMapping.getRealTime(tick);
-        float realTimeLowerTick = realTimeMapping == null ? lowerEntry.getKey() : realTimeMapping.getRealTime(lowerEntry.getKey());
-        float realTimeCeilTick = realTimeMapping == null ? ceilEntry.getKey() : realTimeMapping.getRealTime(ceilEntry.getKey());
+        // --- FIX: Force interpolation in Tick Space ---
+        // We use raw ticks to ensure shape consistency regardless of Speed Ramps (RealTimeMapping).
+        float interpTick = tick;
+        float interpLowerTick = lowerEntry.getKey();
+        float interpCeilTick = ceilEntry.getKey();
 
-        float amount = (realTimeTick - realTimeLowerTick) / (realTimeCeilTick - realTimeLowerTick);
+        // Ensure non-zero duration to prevent division by zero in interpolation math
+        float segmentDuration = interpCeilTick - interpLowerTick;
+        if (segmentDuration <= 0.001f) segmentDuration = 1.0f;
+
+        float amount = (interpTick - interpLowerTick) / segmentDuration;
 
         KeyframeChange leftChange = null;
         KeyframeChange rightChange = null;
 
         // --- 4-POINT INTERPOLATION (Smooth, Circular, Monotone, Nurbs, Quintic) ---
-        // Context: Before(t0) -> Lower(t1) -> Ceil(t2) -> After(t3)
         boolean leftIs4Point = is4Point(leftInterpolation);
         boolean rightIs4Point = is4Point(rightInterpolation);
 
         if (leftIs4Point || rightIs4Point) {
             Map.Entry<Integer, Keyframe> beforeEntry = keyframeTimes.floorEntry(lowerEntry.getKey() - 1);
+            float interpBeforeTick;
+
+            // Fix boundary condition: If no 'before' keyframe, extrapolate time backwards.
             if (beforeEntry == null || beforeEntry.getValue().interpolationType() == InterpolationType.HOLD) {
                 beforeEntry = lowerEntry;
+                interpBeforeTick = interpLowerTick - segmentDuration;
+            } else {
+                interpBeforeTick = beforeEntry.getKey();
             }
 
             Map.Entry<Integer, Keyframe> afterEntry = keyframeTimes.ceilingEntry(ceilEntry.getKey() + 1);
+            float interpAfterTick;
+
+            // Fix boundary condition: If no 'after' keyframe, extrapolate time forwards.
             if (afterEntry == null || ceilEntry.getValue().interpolationType() == InterpolationType.HOLD) {
                 afterEntry = ceilEntry;
+                interpAfterTick = interpCeilTick + segmentDuration;
+            } else {
+                interpAfterTick = afterEntry.getKey();
             }
-
-            float realTimeBeforeTick = realTimeMapping == null ? beforeEntry.getKey() : realTimeMapping.getRealTime(beforeEntry.getKey());
-            float realTimeAfterTick = realTimeMapping == null ? afterEntry.getKey() : realTimeMapping.getRealTime(afterEntry.getKey());
 
             // Generate Change
             if (leftIs4Point) {
                 leftChange = create4PointChange(leftInterpolation, beforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
-                        realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+                        interpBeforeTick, interpLowerTick, interpCeilTick, interpAfterTick, amount);
             }
             if (rightIs4Point) {
                 if (leftIs4Point && leftInterpolation == rightInterpolation) {
                     rightChange = leftChange;
                 } else {
                     rightChange = create4PointChange(rightInterpolation, beforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
-                            realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+                            interpBeforeTick, interpLowerTick, interpCeilTick, interpAfterTick, amount);
                 }
             }
         }
 
         // --- 5-POINT INTERPOLATION (Akima, Smoothing) ---
-        // Context: BeforeBefore(tBefore) -> Before(t0) -> Lower(t1) -> Ceil(t2) -> After(t3)
         boolean leftIs5Point = is5Point(leftInterpolation);
         boolean rightIs5Point = is5Point(rightInterpolation);
 
         if (leftIs5Point || rightIs5Point) {
-            // Need neighbors: Before, After
             Map.Entry<Integer, Keyframe> beforeEntry = keyframeTimes.floorEntry(lowerEntry.getKey() - 1);
+            float interpBeforeTick;
             if (beforeEntry == null || beforeEntry.getValue().interpolationType() == InterpolationType.HOLD) {
                 beforeEntry = lowerEntry;
-            }
-            Map.Entry<Integer, Keyframe> afterEntry = keyframeTimes.ceilingEntry(ceilEntry.getKey() + 1);
-            if (afterEntry == null || ceilEntry.getValue().interpolationType() == InterpolationType.HOLD) {
-                afterEntry = ceilEntry;
+                interpBeforeTick = interpLowerTick - segmentDuration;
+            } else {
+                interpBeforeTick = beforeEntry.getKey();
             }
 
-            // Need extra neighbor: BeforeBefore
+            Map.Entry<Integer, Keyframe> afterEntry = keyframeTimes.ceilingEntry(ceilEntry.getKey() + 1);
+            float interpAfterTick;
+            if (afterEntry == null || ceilEntry.getValue().interpolationType() == InterpolationType.HOLD) {
+                afterEntry = ceilEntry;
+                interpAfterTick = interpCeilTick + segmentDuration;
+            } else {
+                interpAfterTick = afterEntry.getKey();
+            }
+
             Map.Entry<Integer, Keyframe> beforeBeforeEntry = null;
-            // Only look back if beforeEntry is not the same as lowerEntry (meaning we actually found a valid before node)
+            float interpBeforeBeforeTick;
+
             if (beforeEntry != lowerEntry) {
                 beforeBeforeEntry = keyframeTimes.floorEntry(beforeEntry.getKey() - 1);
             }
             if (beforeBeforeEntry == null || beforeBeforeEntry.getValue().interpolationType() == InterpolationType.HOLD) {
                 beforeBeforeEntry = beforeEntry;
+                interpBeforeBeforeTick = interpBeforeTick - segmentDuration;
+            } else {
+                interpBeforeBeforeTick = beforeBeforeEntry.getKey();
             }
 
-            float realTimeBeforeTick = realTimeMapping == null ? beforeEntry.getKey() : realTimeMapping.getRealTime(beforeEntry.getKey());
-            float realTimeAfterTick = realTimeMapping == null ? afterEntry.getKey() : realTimeMapping.getRealTime(afterEntry.getKey());
-            float realTimeBeforeBeforeTick = realTimeMapping == null ? beforeBeforeEntry.getKey() : realTimeMapping.getRealTime(beforeBeforeEntry.getKey());
-
-            // Generate Change
             if (leftIs5Point) {
                 leftChange = create5PointChange(leftInterpolation, beforeEntry.getValue(), beforeBeforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
-                        realTimeBeforeBeforeTick, realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+                        interpBeforeBeforeTick, interpBeforeTick, interpLowerTick, interpCeilTick, interpAfterTick, amount);
             }
             if (rightIs5Point) {
                 if (leftIs5Point && leftInterpolation == rightInterpolation) {
                     rightChange = leftChange;
                 } else {
                     rightChange = create5PointChange(rightInterpolation, beforeEntry.getValue(), beforeBeforeEntry.getValue(), lowerKeyframe, ceilEntry.getValue(), afterEntry.getValue(),
-                            realTimeBeforeBeforeTick, realTimeBeforeTick, realTimeLowerTick, realTimeCeilTick, realTimeAfterTick, amount);
+                            interpBeforeBeforeTick, interpBeforeTick, interpLowerTick, interpCeilTick, interpAfterTick, amount);
                 }
             }
         }
@@ -226,11 +237,14 @@ public class KeyframeTrack {
 
             Map<Float, Keyframe> transformedMap = new HashMap<>();
             for (Map.Entry<Integer, Keyframe> entry : subMap.entrySet()) {
-                float realtime = realTimeMapping == null ? entry.getKey() : realTimeMapping.getRealTime(entry.getKey());
-                transformedMap.put(realtime, entry.getValue());
+                // Fix for Speed Ramps with Hermite: Use Ticks (entry.getKey()) directly.
+                // This matches the behavior of 4-point/5-point splines which ignore RealTimeMapping
+                // to preserve the path shape.
+                float time = (float) entry.getKey();
+                transformedMap.put(time, entry.getValue());
             }
 
-            KeyframeChange hermiteChange = lowerKeyframe.createHermiteInterpolatedChange(transformedMap, realTimeTick);
+            KeyframeChange hermiteChange = lowerKeyframe.createHermiteInterpolatedChange(transformedMap, interpTick);
             if (leftInterpolation == SidedInterpolationType.HERMITE) {
                 leftChange = hermiteChange;
             }
